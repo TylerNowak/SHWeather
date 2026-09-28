@@ -1,0 +1,120 @@
+# SHWeatherService configuration.
+# Copy to config.yaml (development) or /etc/shweather/config.yaml (Raspberry Pi install).
+# Every setting is optional; the defaults are shown. Check the result with:  shweather config
+
+# Relative paths are relative to this file. ~ and environment variables work
+# ($HOME on Linux, %PROGRAMDATA% on Windows).
+data_dir: ./data              # SQLite database (/var/lib/shweather on the Pi, ProgramData on Windows)
+host: 0.0.0.0                 # listen on the boat network
+port: 8080
+web_root:                     # empty = the web/ folder next to the code
+log_level: info
+log_file:                     # e.g. logs/shweather.log (rotated at 5 MB); empty = console only
+access_log: false             # log every HTTP request (phones poll every 5 s)
+observation_retention_days: 60
+
+# Changes (settings, position, downloads) always require the app's own request header,
+# which blocks other web pages from triggering them. Set a token as well when the Pi
+# shares a network with strangers (marina Wi-Fi); enter it in the app under Settings.
+api_token:
+
+# Fallback position when there is no GPS fix and no phone has sent one.
+# home:
+#   lat: 41.90
+#   lon: -87.50
+
+forecast:
+  refresh_minutes: 60         # re-download the forecast grid this often when online
+  forecast_days: 5            # 1-16
+  models: best_match          # Open-Meteo model id(s): best_match, ecmwf_ifs025, gfs_seamless, ...
+  grid:
+    steps: 2                  # 2 -> 5x5 points around the boat
+    spacing_deg: 0.25         # ~15 nm; with steps=2 covers about +/-30 nm
+  refetch_distance_nm: 10     # refresh early once the boat moves this far from the grid centre
+  passage_max_points: 400     # cap for "download passage area"
+
+# Bandwidth limits for everything the Pi downloads. All of these can also be changed
+# from the app (Settings > Bandwidth); changes made there override this file.
+bandwidth:
+  max_kbps:                   # speed cap in kbit/s shared by all downloads; empty = unlimited
+  daily_mb:                   # data cap per UTC day; empty = unlimited
+  monthly_mb:                 # data cap per calendar month (UTC); empty = unlimited
+  alert_reserve_pct: 10       # last share of each cap kept for NWS safety alerts
+  saver: false                # 3x3 grid, 3-day forecast, fetches 2-4x less often
+
+sources:
+  contact: admin@example.com  # PLEASE SET: api.weather.gov requires a contact in the User-Agent
+  open_meteo: true
+  open_meteo_url: https://api.open-meteo.com          # or your own Open-Meteo instance
+  open_meteo_marine_url: https://marine-api.open-meteo.com
+  open_meteo_apikey:          # only for Open-Meteo's commercial API
+  nws: true                   # US National Weather Service (alerts, zone text, Great Lakes waves)
+  ndbc: true                  # NOAA buoy observations
+  ndbc_radius_nm: 60
+  coops: true                 # NOAA tides and tidal currents (US coasts)
+  coops_radius_nm: 25
+  marine_zone:                # force an NWS marine zone, e.g. LMZ740; empty = look up by position
+  timeout_s: 20
+
+sensors:
+  # Height of the barometer above mean sea level, so readings can be compared with
+  # forecast MSL pressure. Matters on the Great Lakes (surface elevation, approximately:
+  # Superior 183 m, Michigan-Huron 176 m, Erie 174 m, Ontario 75 m) and inland lakes.
+  pressure_altitude_m: 0
+  pressure_offset_hpa: 0      # calibration: add this to every barometer reading
+
+  nmea: []
+  # nmea:
+  #   - type: tcp             # Wi-Fi/Ethernet multiplexer, OpenCPN or Signal K NMEA 0183 server
+  #     host: 192.168.1.1
+  #     port: 10110
+  #   - type: udp             # broadcast multiplexers (listens on all interfaces)
+  #     port: 10110
+  #   - type: serial          # USB-RS422 adapter (pip install 'shweather[serial]')
+  #     device: /dev/ttyUSB0  # Windows: COM3 etc. (Device Manager > Ports)
+  #     baudrate: 4800        # 38400 for high-speed (AIS) talkers
+  #   - type: file            # replay a recorded log
+  #     path: ./logs/sample.nmea
+  #     loop: true
+  #     rate_hz: 5
+
+  # signalk:                  # e.g. OpenPlotter; bridges NMEA 2000
+  #   url: http://localhost:3000
+  #   token:                  # if Signal K security is enabled
+  #   poll_seconds: 2
+
+  # bme280:                   # $5 barometer on the Pi's I2C bus (pip install 'shweather[bme280]')
+  #   i2c_bus: 1
+  #   address: 0x76
+  #   interval_seconds: 30
+
+# Default units for phones and tablets that haven't picked their own (each device can
+# switch between Metric and Imperial in the app).
+display:
+  units: auto                 # auto (each device follows its region), metric or imperial
+  nautical: true              # knots and nautical miles for wind, current and distance
+
+# Live radar and satellite pictures for the app's Radar tab. They download only while
+# someone has the tab open, count against the bandwidth caps (never the alert reserve),
+# and are cached here so every phone shares one download. The tab's forecast wind, cloud
+# and rain layers and its land map work offline without any of this.
+imagery:
+  enabled: true
+  radar: rainviewer           # rainviewer (worldwide), iem (NOAA NEXRAD, US + Great Lakes, more detail), none
+  satellite: gibs             # gibs (NASA: GOES-East/West or Himawari infrared), rainviewer, none
+  rainviewer_url: https://api.rainviewer.com   # or your own RainViewer-compatible server (LibreWXR)
+  loop_minutes: 60            # radar/satellite loop length; 0 = latest picture only (saver mode does this too)
+  cache_mb: 200               # disk space for cached pictures; the oldest go first
+  basemap_url:                # optional online map under the weather, e.g. a {z}/{x}/{y} tile server
+  basemap_attribution: ""
+
+# Your boat's limits, used for the reef / caution / no-go colours. Also editable in the app.
+boat:
+  name: My boat
+  reef1_kn: 15
+  reef2_kn: 20
+  max_wind_kn: 25
+  max_gust_kn: 32
+  max_wave_m: 2.0
+  min_visibility_nm: 1.0
+  min_wave_period_ratio: 0    # e.g. 4: warn when period (s) < 4 x height (m), short steep seas

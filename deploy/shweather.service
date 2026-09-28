@@ -1,0 +1,30 @@
+[Unit]
+Description=SHWeatherService - self-hosted marine weather
+Documentation=https://github.com/TylerNowak/SHWeatherService
+After=network-online.target time-sync.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=shweather
+Group=shweather
+# Access to serial adapters / I2C comes from the user's dialout and i2c group
+# memberships (added by install.sh), which systemd applies automatically.
+WorkingDirectory=/opt/shweather
+Environment=SHWEATHER_CONFIG=/etc/shweather/config.yaml
+ExecStart=/opt/shweather/.venv/bin/shweather serve
+Restart=always
+RestartSec=5
+
+# Hardening: the service only needs its data directory and the network.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/shweather
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+
+[Install]
+WantedBy=multi-user.target

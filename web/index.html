@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>SHWeather</title>
+  <meta name="description" content="Self-hosted marine weather from the boat's own weather server">
+  <meta name="theme-color" content="#0f2742">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="stylesheet" href="css/app.css">
+  <script>
+    // Apply the saved theme before first paint (no flash). Storage may be unavailable.
+    try { const t = localStorage.getItem("shw.theme"); if (t && t !== "auto") document.documentElement.dataset.theme = t; } catch (e) {}
+  </script>
+  <script type="module" src="js/app.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><path d="M15 4 L15 22 L6 22 Z" /><path d="M17 8 L17 22 L25 22 Z" opacity=".7"/><path d="M4 26 q4 -3 8 0 t8 0 t8 0" fill="none" stroke-width="2"/></svg>
+      <div>
+        <div class="brand-name">SHWeather</div>
+        <div class="brand-pos" id="position">Waiting for position…</div>
+      </div>
+    </div>
+    <span class="badge" id="conn-badge" role="status">…</span>
+    <div class="units-toggle" id="units-toggle" role="group" aria-label="Units">
+      <button type="button" data-system="metric" aria-pressed="false">Metric</button>
+      <button type="button" data-system="imperial" aria-pressed="false">Imperial</button>
+    </div>
+    <div class="topbar-actions">
+      <button class="icon-btn" id="theme-btn" type="button" aria-label="Change theme" title="Theme: auto">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="5"/><path d="M12 1v3M12 20v3M1 12h3M20 12h3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg>
+      </button>
+      <button class="icon-btn" id="settings-btn" type="button" aria-label="Settings" aria-haspopup="dialog">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <div id="demo-banner" class="demo-banner" hidden>Demo mode: synthetic data, not a real forecast.</div>
+
+  <nav class="tabs" aria-label="Views">
+    <a class="tab" href="#weather" data-view="weather" aria-current="page">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17h18M5 17V9M9 17V5M13 17v-6M17 17V8"/></svg>
+      <span>Weather</span>
+    </a>
+    <a class="tab" href="#radar" data-view="radar">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><path d="M12 12l6.5-6.5"/><circle cx="12" cy="12" r="1.2" class="fill"/></svg>
+      <span>Radar</span>
+    </a>
+  </nav>
+
+  <main id="main">
+   <div id="view-weather" class="view">
+    <section id="alerts" class="alerts" aria-live="polite"></section>
+
+    <section class="now card" aria-labelledby="now-title">
+      <div class="now-head">
+        <h2 id="now-title" class="eyebrow">Now</h2>
+        <div id="assessment" class="status-chip" hidden></div>
+      </div>
+      <div class="now-body">
+        <div class="wind-hero">
+          <div class="compass" aria-hidden="true">
+            <svg viewBox="0 0 100 100">
+              <circle class="compass-ring" cx="50" cy="50" r="44"/>
+              <g class="compass-ticks"></g>
+              <text x="50" y="16" class="compass-n">N</text>
+              <g id="wind-arrow" class="wind-arrow"><path d="M50 22 L57 40 L52 38 L52 78 L48 78 L48 38 L43 40 Z"/></g>
+            </svg>
+          </div>
+          <div>
+            <div class="hero-value"><span id="wind-speed">–</span> <span class="hero-unit" id="wind-unit">kn</span></div>
+            <div class="hero-sub" id="wind-dir">–</div>
+            <div class="hero-meta" id="wind-meta"></div>
+          </div>
+        </div>
+        <div class="tiles" id="tiles"></div>
+      </div>
+      <p class="note" id="local-note" hidden></p>
+    </section>
+
+    <section class="card" aria-labelledby="outlook-title">
+      <h2 id="outlook-title" class="eyebrow">Next 24 hours</h2>
+      <div id="outlook" class="outlook"></div>
+    </section>
+
+    <section class="card chart-card" aria-labelledby="wind-chart-title">
+      <div class="card-head">
+        <h2 id="wind-chart-title" class="eyebrow">Wind</h2>
+        <div class="seg range-seg" role="group" aria-label="Forecast range">
+          <button type="button" data-hours="24" aria-pressed="false">24 h</button>
+          <button type="button" data-hours="48" aria-pressed="true">48 h</button>
+          <button type="button" data-hours="96" aria-pressed="false">4 d</button>
+        </div>
+      </div>
+      <div id="wind-chart" class="chart"></div>
+    </section>
+
+    <section class="card chart-card" id="wave-card" aria-labelledby="wave-chart-title" hidden>
+      <h2 id="wave-chart-title" class="eyebrow">Waves</h2>
+      <div id="wave-chart" class="chart"></div>
+    </section>
+
+    <section class="card chart-card" aria-labelledby="baro-chart-title">
+      <h2 id="baro-chart-title" class="eyebrow">Barometer</h2>
+      <div id="baro-chart" class="chart"></div>
+    </section>
+
+    <section class="card" aria-labelledby="table-title">
+      <h2 id="table-title" class="eyebrow">Hour by hour</h2>
+      <div class="table-wrap" tabindex="0" aria-label="Hourly forecast table, scrolls horizontally">
+        <table class="hourly" id="hourly"></table>
+      </div>
+    </section>
+
+    <div class="grid-2">
+      <section class="card" id="tide-card" aria-labelledby="tide-title" hidden>
+        <h2 id="tide-title" class="eyebrow">Tides &amp; currents</h2>
+        <div id="tides"></div>
+      </section>
+
+      <section class="card" id="buoy-card" aria-labelledby="buoy-title" hidden>
+        <h2 id="buoy-title" class="eyebrow">Nearby observations</h2>
+        <div id="buoys"></div>
+      </section>
+
+      <section class="card" id="zambretti-card" aria-labelledby="zam-title" hidden>
+        <h2 id="zam-title" class="eyebrow">Barometer forecast (works offline)</h2>
+        <div id="zambretti"></div>
+      </section>
+
+      <section class="card" id="marine-text-card" aria-labelledby="mt-title" hidden>
+        <h2 id="mt-title" class="eyebrow">Official marine forecast</h2>
+        <div id="marine-text"></div>
+      </section>
+    </div>
+   </div>
+
+    <section id="view-radar" class="view radar-view" aria-label="Radar and weather map" hidden>
+      <div class="map-wrap">
+        <canvas id="radar-canvas" class="map-canvas" tabindex="0" role="img"
+                aria-label="Weather map around the boat. Drag or use the arrow keys to move, pinch or the plus and minus buttons to zoom, tap for details at a spot."></canvas>
+        <div id="map-stamp" class="map-stamp" aria-live="polite"></div>
+        <div class="map-tools">
+          <button type="button" class="map-btn" id="map-zoom-in" aria-label="Zoom in"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
+          <button type="button" class="map-btn" id="map-zoom-out" aria-label="Zoom out"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/></svg></button>
+          <button type="button" class="map-btn" id="map-center" aria-label="Keep the boat in the middle" aria-pressed="true"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="6"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg></button>
+        </div>
+        <div class="map-scale"><span class="north" aria-label="North is up">N&thinsp;↑</span><span>Range <b id="map-range"></b></span></div>
+        <div id="map-inspect" class="map-inspect" role="dialog" aria-label="Details at this spot" hidden></div>
+      </div>
+      <div class="radar-side">
+        <div class="card timeline">
+          <div class="timeline-row">
+            <button type="button" class="play-btn" id="map-play" aria-label="Play" aria-pressed="false">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path class="i-play" d="M8 5l11 7-11 7z"/><path class="i-pause" d="M7 5h4v14H7zM13 5h4v14h-4z"/></svg>
+            </button>
+            <div class="time-track" id="map-time-track">
+              <input type="range" id="map-time" min="0" max="0" value="0" step="1" aria-label="Time shown on the map">
+              <div class="time-labels" id="map-time-labels" aria-hidden="true"></div>
+            </div>
+            <button type="button" class="btn now-btn" id="map-now">Now</button>
+          </div>
+        </div>
+        <div class="card">
+          <div class="layer-chips" id="map-layers" role="group" aria-label="Map layers">
+            <button type="button" data-layer="rain" aria-pressed="true">Rain</button>
+            <button type="button" data-layer="clouds" aria-pressed="true">Clouds</button>
+            <button type="button" data-layer="wind" aria-pressed="true">Wind</button>
+            <button type="button" data-layer="buoys" aria-pressed="true">Buoys</button>
+          </div>
+          <div id="map-status" class="map-status" role="status" hidden></div>
+          <div id="map-legend" class="map-legend"></div>
+          <p class="map-help">Radar and satellite show what happened in the last hour (downloaded by the weather server while this tab is open). After "Now", rain, clouds and wind come from the forecast, which works offline. Tap the map for values at a spot.</p>
+          <p class="muted map-attrib" id="map-attrib"></p>
+        </div>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <div id="sources" class="sources"></div>
+      <p class="disclaimer">Not for navigation. Supplements official forecasts, your barometer and your own judgement.</p>
+      <p class="muted">Weather data: <a href="https://open-meteo.com/">Open-Meteo.com</a> (CC BY 4.0), NOAA National Weather Service, NDBC and CO-OPS. API docs at <a href="docs">/docs</a>.</p>
+      <p class="muted" id="version"></p>
+    </footer>
+  </main>
+
+  <dialog id="settings" aria-labelledby="settings-title">
+    <form method="dialog" class="dialog-head">
+      <h2 id="settings-title">Settings</h2>
+      <button class="icon-btn" value="close" aria-label="Close settings">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </form>
+    <div class="dialog-body" id="settings-body"></div>
+  </dialog>
+
+  <div id="tooltip" class="tooltip" role="status" hidden></div>
+</body>
+</html>
