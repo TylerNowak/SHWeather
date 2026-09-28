@@ -1,4 +1,4 @@
-# SHWeatherService
+# SHWeather
 
 **Self-hosted, offline-first marine weather for a Raspberry Pi or Windows PC aboard your boat.**
 
