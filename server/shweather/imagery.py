@@ -242,27 +242,32 @@ class Imagery:
             self._lists[layer] = fl
             return fl
 
-    def _trim(self, frames: list[Frame]) -> list[Frame]:
-        """Keep the loop length from config, at 10-minute steps; only the latest in saver mode."""
+    def _trim(self, frames: list[Frame], step_s: int = FRAME_STEP_S) -> list[Frame]:
+        """The loop: frames on fixed ``step_s`` marks within ``loop_minutes`` of the newest;
+        only the newest in saver mode.
+
+        Fixed marks matter: a loop counted back from the newest frame would shift with every
+        new frame, and the whole loop would be downloaded again on each refresh. With 20-minute
+        satellite steps, a new satellite picture is downloaded every 20 minutes, not every 10.
+        """
         past = sorted((f for f in frames if not f.forecast), key=lambda f: f.time)
         ahead = sorted((f for f in frames if f.forecast), key=lambda f: f.time)
-        # Keep frames on 10-minute marks (sources with 5-minute frames would otherwise shift the
-        # whole loop, and so re-download all of it, on every refresh).
-        aligned = [f for f in past if f.time % FRAME_STEP_S == 0]
-        past = aligned or past
         if not past:
             return []
+        newest = past[-1]
         if self.saver():
-            return past[-1:]
-        start = past[-1].time - self.cfg.loop_minutes * 60
-        kept, last = [], None
-        for f in reversed(past):
-            if f.time < start:
-                break
-            if last is None or last - f.time >= FRAME_STEP_S - 60:
-                kept.append(f)
-                last = f.time
-        return list(reversed(kept)) + ahead
+            return [newest]
+        start = newest.time - self.cfg.loop_minutes * 60
+        on_marks = [f for f in past if f.time % step_s == 0 and f.time >= start]
+        if not on_marks:                       # a source with frames off the marks: space them out
+            last = None
+            for f in reversed(past):
+                if f.time < start:
+                    break
+                if last is None or last - f.time >= step_s - 60:
+                    on_marks.insert(0, f)
+                    last = f.time
+        return on_marks + ahead
 
     async def _list_radar(self, now: float) -> FrameList:
         c = self.cfg
@@ -309,7 +314,8 @@ class Imagery:
                       for f in (data.get("satellite") or {}).get("infrared") or [] if f.get("path")]
             if not frames:
                 raise ImageryError(404, "the RainViewer-compatible server lists no satellite frames")
-            return FrameList(self._trim(frames), c.rainviewer_max_zoom, "rainviewer", "Satellite: RainViewer-compatible server")
+            return FrameList(self._trim(frames, c.satellite_step_minutes * 60), c.rainviewer_max_zoom, "rainviewer",
+                             "Satellite: RainViewer-compatible server")
         pos = self.position()
         sat = pick_satellite(pos["lon"])
         if not sat:
@@ -318,10 +324,12 @@ class Imagery:
         layer, _, name = sat
         level = await self._gibs_level(layer)
         base = f"{c.gibs_url.rstrip('/')}/wmts/epsg3857/best/{layer}/default"
-        latest = await self._gibs_latest(base, level, pos, now)
+        step = c.satellite_step_minutes * 60
+        latest = await self._gibs_latest(base, level, pos, now, step)
         frames = [Frame(t, f"{base}/{utc(t, '%Y-%m-%dT%H:%M:%SZ')}/GoogleMapsCompatible_Level{level}/{{z}}/{{y}}/{{x}}.png")
-                  for t in range(latest - c.loop_minutes * 60, latest + 1, FRAME_STEP_S)]
-        return FrameList(self._trim(frames), level, "gibs", f"Satellite: {name} infrared via NASA GIBS",
+                  for t in range(latest - c.loop_minutes * 60, latest + 1, step)]
+        return FrameList(self._trim(frames, c.satellite_step_minutes * 60), level, "gibs",
+                         f"Satellite: {name} infrared via NASA GIBS",
                          "https://earthdata.nasa.gov/gibs")
 
     async def _gibs_level(self, layer: str) -> int:
@@ -338,16 +346,17 @@ class Imagery:
                 return level
         raise ImageryError(502, "NASA GIBS did not offer the satellite layer in Web Mercator")
 
-    async def _gibs_latest(self, base: str, level: int, pos: dict, now: float) -> int:
-        """Newest 10-minute slot GIBS has an image for, found by trying the tile under the boat."""
+    async def _gibs_latest(self, base: str, level: int, pos: dict, now: float, step: int = FRAME_STEP_S) -> int:
+        """Newest loop mark (every ``step`` seconds) GIBS has an image for, found by trying the
+        tile under the boat. The tile found is part of the loop, so the probe costs nothing extra."""
         key = f"gibs_latest:{base}"
         hit = self.db.kv_get(key, max_age_s=FRAME_LIST_TTL_S["satellite"])
         if hit:
             return int(hit[0])
         x, y = tile_at(pos["lat"], pos["lon"], level)
-        slot = int(now // FRAME_STEP_S * FRAME_STEP_S)
-        for k in range(1, PROBE_STEPS + 1):
-            t = slot - k * FRAME_STEP_S
+        slot = int(now // step * step)
+        for k in range(1, max(2, PROBE_STEPS * FRAME_STEP_S // step) + 1):
+            t = slot - k * step
             url = f"{base}/{utc(t, '%Y-%m-%dT%H:%M:%SZ')}/GoogleMapsCompatible_Level{level}/{level}/{y}/{x}.png"
             resp = await self.http.get(url)
             if resp.status_code == 200 and image_type(resp.content) and len(resp.content) >= EMPTY_TILE_BYTES:

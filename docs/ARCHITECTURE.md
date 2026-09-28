@@ -166,9 +166,12 @@ timeline that runs from the last hour of observations into the forecast:
   mode offers only the latest picture; a reached data cap pauses the live layers and the
   forecast layers carry on. Cached pictures are deleted after 6 hours or when over
   `imagery.cache_mb`.
-- Infrared pictures are grey everywhere; the app turns brightness into opacity (cold,
-  bright cloud tops opaque, warm ground clear) and tints the result for the theme.
-  Low warm cloud and fog look like clear sky in infrared.
+- Infrared pictures cover everything, ground included. GIBS uses an enhanced scale: grey
+  that brightens as it gets colder, then colours for the coldest cloud tops. The app turns
+  that into a cloud mask (coloured = solid cloud, grey = more opaque the colder it is,
+  warm ground clear) and tints it for the theme. Low warm cloud and fog look like clear
+  sky in infrared. The satellite loop uses 20-minute steps: clouds change slowly and a
+  satellite tile is about 8× the size of a radar tile.
 
 **Staleness is always visible.** Every response carries `fetched_at` and `age_s`, and
 the UI turns the forecast badge amber after 6 h and red after 24 h.

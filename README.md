@@ -1,4 +1,4 @@
-# SHWeather
+# SHWeatherService
 
 **Self-hosted, offline-first marine weather for a Raspberry Pi or Windows PC aboard your boat.**
 
@@ -55,8 +55,8 @@ on the boat's Wi-Fi open the **SHWeather** web app, with no app store and no clo
 ## Try it in 2 minutes (no boat, no internet)
 
 ```bash
-git clone https://github.com/TylerNowak/SHWeatherService.git
-cd SHWeatherService
+git clone https://github.com/TylerNowak/SHWeather.git
+cd SHWeather
 python3 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 shweather serve --demo
@@ -65,8 +65,8 @@ shweather serve --demo
 On Windows (PowerShell, Python 3.11+ installed):
 
 ```powershell
-git clone https://github.com/TylerNowak/SHWeatherService.git
-cd SHWeatherService
+git clone https://github.com/TylerNowak/SHWeather.git
+cd SHWeather
 py -3 -m venv .venv
 .venv\Scripts\python -m pip install -e ".[dev]"
 .venv\Scripts\shweather serve --demo
@@ -79,8 +79,8 @@ Michigan, a boat beating to windward) through the real parsers. The API is docum
 ## Install on the Raspberry Pi
 
 ```bash
-git clone https://github.com/TylerNowak/SHWeatherService.git
-cd SHWeatherService
+git clone https://github.com/TylerNowak/SHWeather.git
+cd SHWeather
 sudo ./deploy/install.sh              # add --serial and/or --bme280 for those inputs
 sudo nano /etc/shweather/config.yaml  # set sources.contact, home position, instruments
 sudo systemctl restart shweather

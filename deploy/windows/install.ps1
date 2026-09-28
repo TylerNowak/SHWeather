@@ -25,7 +25,7 @@
 .PARAMETER Python
   Path to python.exe (3.11+) to build the virtualenv from. Found automatically otherwise.
 .PARAMETER InstallDir
-  Where the app lives. Pass your git checkout (e.g. D:\Git\SHWeatherService) to run the
+  Where the app lives. Pass your git checkout (e.g. D:\Git\SHWeather) to run the
   service straight from it: nothing is copied, and code changes apply after a restart.
 
 .EXAMPLE

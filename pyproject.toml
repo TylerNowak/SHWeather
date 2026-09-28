@@ -9,7 +9,7 @@ description = "Self-hosted, offline-first marine weather for a Raspberry Pi or W
 readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.11"
-authors = [{ name = "SHWeatherService contributors" }]
+authors = [{ name = "Tyler Nowak" }]
 keywords = ["weather", "marine", "sailing", "raspberry-pi", "nmea", "signalk", "self-hosted"]
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -38,8 +38,8 @@ dev = ["pytest>=8", "ruff>=0.5"]
 shweather = "shweather.__main__:main"
 
 [project.urls]
-Homepage = "https://github.com/TylerNowak/SHWeatherService"
-Issues = "https://github.com/TylerNowak/SHWeatherService/issues"
+Homepage = "https://github.com/TylerNowak/SHWeather"
+Issues = "https://github.com/TylerNowak/SHWeather/issues"
 
 [tool.setuptools.packages.find]
 where = ["server"]

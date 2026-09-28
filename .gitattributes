@@ -1,0 +1,9 @@
+# Keep LF endings in the repo so scripts and the systemd unit work on the Pi,
+# even when the repo is edited on Windows. Windows scripts use CRLF.
+* text=auto eol=lf
+*.ps1 text eol=crlf
+*.cmd text eol=crlf
+*.bat text eol=crlf
+*.png binary
+*.jpg binary
+*.ico binary

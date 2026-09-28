@@ -104,6 +104,7 @@ imagery:
   satellite: gibs             # gibs (NASA: GOES-East/West or Himawari infrared), rainviewer, none
   rainviewer_url: https://api.rainviewer.com   # or your own RainViewer-compatible server (LibreWXR)
   loop_minutes: 60            # radar/satellite loop length; 0 = latest picture only (saver mode does this too)
+  satellite_step_minutes: 20  # satellite loop step (10-60); satellite tiles are ~8x larger than radar tiles
   cache_mb: 200               # disk space for cached pictures; the oldest go first
   basemap_url:                # optional online map under the weather, e.g. a {z}/{x}/{y} tile server
   basemap_attribution: ""

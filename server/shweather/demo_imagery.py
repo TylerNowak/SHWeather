@@ -142,10 +142,19 @@ def radar_tile(sky: DemoSky, t: float, z: int, x: int, y: int) -> bytes:
     return _render(z, x, y, pixel)
 
 
+# Like NASA GIBS "clean infrared": grey that brightens as it gets colder (warm ground dark,
+# low and mid cloud lighter), then colour for the coldest cloud tops.
+IR_COLD_TOPS = [(0.40, (60, 210, 235)), (0.75, (20, 90, 210)), (1.01, (40, 200, 70))]
+
+
 def ir_tile(sky: DemoSky, t: float, z: int, x: int, y: int) -> bytes:
     cells = sky.active_cells(t, _box(z, x, y))
 
     def pixel(lat: float, lon: float):
-        g = int(45 + 205 * sky.cloud(t, lat, lon, cells))
-        return (g, g, g, 255)
+        c = sky.cloud(t, lat, lon, cells)
+        if c < 0.75:
+            g = int(95 + 140 * c / 0.75)
+            return (g, g, g, 255)
+        k = (c - 0.75) / 0.25
+        return (*next(col for lim, col in IR_COLD_TOPS if k < lim), 255)
     return _render(z, x, y, pixel)

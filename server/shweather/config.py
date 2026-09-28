@@ -161,6 +161,9 @@ class ImageryConfig(BaseModel):
     basemap_max_zoom: int = Field(12, ge=1, le=19)
     basemap_attribution: str = ""
     loop_minutes: int = Field(60, ge=0, le=180, description="Length of the radar/satellite loop; 0 = latest only")
+    satellite_step_minutes: int = Field(
+        20, ge=10, le=60, multiple_of=10,
+        description="Satellite loop step. Clouds change slowly and satellite tiles are ~8x larger than radar tiles")
     cache_mb: float = Field(200, ge=10, description="Disk space for cached images; oldest are deleted first")
 
 

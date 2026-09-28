@@ -11,8 +11,8 @@ connect to it over the boat network.
 On Raspberry Pi OS (Bookworm or newer) or any Debian-like system:
 
 ```bash
-git clone https://github.com/TylerNowak/SHWeatherService.git
-cd SHWeatherService
+git clone https://github.com/TylerNowak/SHWeather.git
+cd SHWeather
 sudo ./deploy/install.sh [--serial] [--bme280]
 ```
 
@@ -30,7 +30,7 @@ shweather config                        # effective configuration (as any user, 
 ### Update
 
 ```bash
-cd SHWeatherService && git pull && sudo ./deploy/install.sh
+cd SHWeather && git pull && sudo ./deploy/install.sh
 ```
 
 Config and database are preserved.
@@ -56,8 +56,8 @@ service runs.
 ### Install
 
 ```powershell
-git clone https://github.com/TylerNowak/SHWeatherService.git
-cd SHWeatherService
+git clone https://github.com/TylerNowak/SHWeather.git
+cd SHWeather
 powershell -ExecutionPolicy Bypass -File deploy\windows\install.ps1
 ```
 
@@ -94,7 +94,7 @@ settings live in `C:\ProgramData\SHWeatherService\config.yaml`.
 Program Files; code changes then apply after a `restart`:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File deploy\windows\install.ps1 -InstallDir D:\Git\SHWeatherService
+powershell -ExecutionPolicy Bypass -File deploy\windows\install.ps1 -InstallDir D:\Git\SHWeather
 ```
 
 The virtualenv goes in the checkout's `.venv` (git ignores it), and `uninstall.ps1` never
@@ -133,7 +133,7 @@ the database, the log and its own Python files open, and Windows won't delete op
 ### Update and uninstall
 
 ```powershell
-cd SHWeatherService; git pull
+cd SHWeather; git pull
 powershell -ExecutionPolicy Bypass -File deploy\windows\install.ps1      # upgrades in place
 
 powershell -ExecutionPolicy Bypass -File deploy\windows\uninstall.ps1    # keeps config + data

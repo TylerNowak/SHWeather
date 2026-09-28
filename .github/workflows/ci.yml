@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    name: Python ${{ matrix.python }} on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+      - run: pip install -e ".[dev,serial]"
+      - run: ruff check server tests
+      - run: pytest
+
+  web:
+    name: Web app (Node)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Syntax-check the PWA modules
+        run: for f in web/js/*.js web/sw.js; do cp "$f" /tmp/check.mjs && node --check /tmp/check.mjs || exit 1; done
+      - name: Unit-system tests
+        run: npm test
+
+  windows-scripts:
+    name: Windows install scripts
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checks with PowerShell 7
+        shell: pwsh
+        run: ./tests/windows/test_scripts.ps1
+      - name: Parse with Windows PowerShell 5.1 (what the service runs under)
+        shell: powershell
+        run: |
+          $bad = 0
+          foreach ($f in Get-ChildItem deploy\windows\*.ps1) {
+            $t = $null; $e = $null
+            [void][System.Management.Automation.Language.Parser]::ParseFile($f.FullName, [ref]$t, [ref]$e)
+            if ($e.Count) { $bad++; $e | ForEach-Object { "{0}:{1} {2}" -f $f.Name, $_.Extent.StartLineNumber, $_.Message } }
+          }
+          exit $bad

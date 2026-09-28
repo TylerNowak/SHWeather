@@ -21,7 +21,7 @@ Downloaded only while someone has the Radar tab open (see `imagery:` in the conf
 |---|---|---|---|---|
 | [RainViewer Weather Maps API](https://www.rainviewer.com/api.html) (default radar) | Past 2 h of radar mosaic tiles at 10-min steps, "Universal Blue" colours, zoom ≤ 7 | Worldwide where national radars exist | Frame list every 5 min while the tab is open | Free for personal and educational use with attribution ("Weather data by RainViewer"); 100 requests/min per IP. Since 1 Jan 2026 the free tier has no satellite, no nowcast and stops at zoom 7 ([transition FAQ](https://www.rainviewer.com/api/transition-faq.html)). Any RainViewer-compatible server works, e.g. a self-hosted [LibreWXR](https://github.com/JoshuaKimsey/LibreWXR), which can add satellite frames and nowcasts. |
 | [Iowa Environmental Mesonet](https://mesonet.agron.iastate.edu/GIS/ridge.phtml) NEXRAD composite (`imagery.radar: iem`) | `ridge::USCOMP-N0Q-<UTC time>` tiles, 5-min composites | US and adjacent waters, including the Great Lakes | Frames computed from the clock; no list download | NOAA data served as-is by Iowa State; fine for a single boat, not for thousands of users |
-| [NASA GIBS](https://nasa-gibs.github.io/gibs-api-docs/) (default satellite) | Band 13 "clean" infrared from GOES-East, GOES-West or Himawari, whichever is nearest the boat; 10-min images | Americas, Atlantic west of ~5° W, Pacific, East Asia, Australia. **Not** Europe, Africa or the Indian Ocean (no Meteosat layer) | The newest image is found by trying the tile under the boat (GIBS publishes with a delay) | Open NASA data; credit NASA GIBS and the satellite |
+| [NASA GIBS](https://nasa-gibs.github.io/gibs-api-docs/) (default satellite) | Band 13 "clean" infrared from GOES-East, GOES-West or Himawari, whichever is nearest the boat; images every 10 min, the loop uses every 20 min | Americas, Atlantic west of ~5° W, Pacific, East Asia, Australia. **Not** Europe, Africa or the Indian Ocean (no Meteosat layer) | The newest image is found by trying the tile under the boat (GIBS publishes with a delay) | Open NASA data; credit NASA GIBS and the satellite |
 | [Natural Earth](https://www.naturalearthdata.com/) 1:50m land and lakes | Offline land map, bundled in the app | Worldwide | Never downloaded | Public domain |
 
 ## Great Lakes specifics
@@ -48,9 +48,9 @@ could be fetched, they became the fixtures.
 | CO-OPS `predictions` (hilo/hourly), `mdapi` stations | Documentation | ⚠️ needs a live check |
 | Open-Meteo forecast + marine | Documentation (parameter and variable names, units, multi-location arrays) | ⚠️ needs a live check |
 | NWS points, gridpoints, alerts, zones, products | Documentation (api.weather.gov blocks automated doc fetchers) | ⚠️ needs a live check; zone lookup by point is the least certain |
-| RainViewer `weather-maps.json` + tiles | Documentation and RainViewer's own example code (Sep 2026) | ⚠️ needs a live check |
+| RainViewer `weather-maps.json` + tiles | Live, on the Great Lakes (28 Sep 2026): 7-frame loops, zoom 6 and 7 tiles | ✅ |
 | IEM `ridge::USCOMP-N0Q-*` tiles | IEM documentation and a project that switched to these names in 2026 | ⚠️ needs a live check; the 10-min publication delay is an estimate |
-| NASA GIBS geostationary infrared | GIBS REST template; layer names from the GIBS directory listing | ⚠️ needs a live check; the tile matrix set (Level 6 vs 7) is detected at run time, and the newest image is found by probing |
+| NASA GIBS geostationary infrared | Live, GOES-East (28 Sep 2026): tile matrix `GoogleMapsCompatible_Level6`, images about 30 min behind real time, found by probing | ✅ GOES-East; GOES-West and Himawari use the same code path, not yet seen live |
 
 To check on a machine with internet: `shweather fetch --lat 41.9 --lon -87.5` prints each
 source's status; any `error` entries point at a format mismatch.
@@ -63,8 +63,13 @@ a reserve so NWS alerts keep flowing when a cap is hit. Data-saver mode shrinks 
 3×3 points and 3 days, skips the NWS gridpoint where ocean wave data exists, and spaces
 fetches 2-4× further apart. The app's Settings show today's and this month's usage.
 
-Radar tab pictures, estimated: a 50 nm view needs about 4-9 tiles per layer; a radar
-tile is typically 5-30 KB and an infrared tile 15-40 KB. Opening the tab with the default
-1-hour loop (7 frames of radar and satellite) costs roughly 1-3 MB, then about 0.2-0.4 MB
-per 10 minutes while it stays open. In data-saver mode only the latest picture of each
-is fetched (roughly 0.1-0.5 MB). Set `imagery.enabled: false` to never download them.
+Radar tab pictures, measured on a real install (Great Lakes, Sep 2026): radar tiles
+average 7 KB (up to about 30 KB in heavy rain), infrared satellite tiles 52 KB (up to
+125 KB). A phone showing a 50 nm range needs about 6 radar and 4 satellite tiles per
+frame, so opening the tab with the default loop (7 radar frames at 10 minutes, 4 satellite
+frames at 20 minutes) costs about 1 MB, then about 0.3 MB per 20 minutes while it stays
+open. A large desktop window shows many more tiles (about 40 radar and 25 satellite):
+about 7 MB to open, then about 1.9 MB per 20 minutes. Data-saver mode fetches only the
+latest picture of each (about 0.3 MB on a phone). `imagery.satellite_step_minutes` and
+`imagery.loop_minutes` trade loop detail for data; `imagery.enabled: false` downloads
+none of it.

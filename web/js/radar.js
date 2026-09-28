@@ -227,10 +227,19 @@ function pumpQueue() {
 }
 
 /**
- * Infrared satellite images are grey everywhere: warm ground dark, cold cloud tops bright.
- * Turn brightness into opacity so clear sky shows the map beneath, and clouds can be
- * tinted to suit the theme. (Low, warm cloud and fog look like clear sky in infrared.)
+ * Cloud opacity for one pixel of an infrared satellite image. NASA GIBS uses an enhanced
+ * scale: grey that brightens as it gets colder (warm ground dark, low and mid cloud
+ * lighter), then colours for the coldest cloud tops (tall showers and storms). Plain grey
+ * infrared images work too. Low, warm cloud and fog look like clear sky in infrared.
  */
+function irAlpha(r, g, b) {
+  if (Math.max(r, g, b) - Math.min(r, g, b) > 40) return 0.92;   // coloured: cold cloud tops
+  const lum = 0.3 * r + 0.59 * g + 0.11 * b;
+  return Math.max(0, Math.min(1, (lum - 115) / 85)) * 0.85;
+}
+
+/** Turn an infrared tile into a cloud mask, so clear sky shows the map beneath and clouds
+ * can be tinted to suit the theme. */
 function cloudMask(img) {
   const c = makeCanvas(img.width, img.height);
   const x = c.getContext("2d", { willReadFrequently: true });
@@ -238,8 +247,7 @@ function cloudMask(img) {
   const d = x.getImageData(0, 0, c.width, c.height);
   const p = d.data;
   for (let i = 0; i < p.length; i += 4) {
-    const lum = 0.3 * p[i] + 0.59 * p[i + 1] + 0.11 * p[i + 2];
-    const a = Math.max(0, Math.min(1, (lum - 80) / 130));
+    const a = irAlpha(p[i], p[i + 1], p[i + 2]);
     p[i] = 255; p[i + 1] = 255; p[i + 2] = 255;
     p[i + 3] = Math.round(p[i + 3] * a);
   }
@@ -1220,4 +1228,4 @@ export function radarUnitsChanged() {
 }
 
 // Exposed for tests.
-export const _internals = { worldXY, worldToLatLon, buildGrid, sample, timeWeights, windAt, rainColor, distanceNm, bearingDeg, copyShift };
+export const _internals = { worldXY, worldToLatLon, buildGrid, sample, timeWeights, windAt, rainColor, distanceNm, bearingDeg, copyShift, irAlpha };

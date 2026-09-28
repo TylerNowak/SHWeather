@@ -1,6 +1,6 @@
 [Unit]
 Description=SHWeatherService - self-hosted marine weather
-Documentation=https://github.com/TylerNowak/SHWeatherService
+Documentation=https://github.com/TylerNowak/SHWeather
 After=network-online.target time-sync.target
 Wants=network-online.target
 

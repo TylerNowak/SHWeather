@@ -1,0 +1,31 @@
+000
+FZUS53 KLOT 281434
+NSHLOT
+
+Nearshore Marine Forecast
+National Weather Service Chicago/Romeoville IL
+934 AM CDT Mon Sep 28 2026
+
+For waters within five nautical miles of shore on Lake Michigan
+
+LMZ740>742-282145-
+Winthrop Harbor to Northerly Island IL-
+934 AM CDT Mon Sep 28 2026
+
+...SMALL CRAFT ADVISORY IN EFFECT FROM 4 PM CDT THIS AFTERNOON
+THROUGH TUESDAY AFTERNOON...
+
+.TODAY...South winds 10 to 15 kt. Waves 1 to 3 ft.
+.TONIGHT...Southwest winds 15 to 25 kt with gusts to 30 kt.
+Waves 3 to 5 ft.
+
+$$
+
+LMZ743-744-
+745-282145-
+Northerly Island to Michigan City IN-
+934 AM CDT Mon Sep 28 2026
+
+.TODAY...South winds 5 to 10 kt. Waves 1 ft or less.
+
+$$

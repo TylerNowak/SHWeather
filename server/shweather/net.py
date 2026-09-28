@@ -78,7 +78,7 @@ class Http:
         self._pending = 0     # wire bytes of unfinished downloads
         self._consumed = 0    # wire bytes downloaded by this process (only ever grows)
         ua = (f"SHWeatherService/{__version__} "
-              f"(+https://github.com/TylerNowak/SHWeatherService; {settings.sources.contact})")
+              f"(+https://github.com/TylerNowak/SHWeather; {settings.sources.contact})")
         self.client = httpx.AsyncClient(
             timeout=settings.sources.timeout_s,
             headers={"User-Agent": ua, "Accept-Encoding": "gzip, deflate"},
