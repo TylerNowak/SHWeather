@@ -5,13 +5,17 @@ blocks the others. `/api/status` and the footer of the app show each source's he
 
 | Source | What we use | Coverage | Default cadence | Terms |
 |---|---|---|---|---|
-| [Open-Meteo forecast API](https://open-meteo.com/en/docs) | Wind, gusts, direction (kn), MSL pressure, temperature, dew point, humidity, precipitation, cloud, visibility, CAPE, weather code, day/night | Global; `best_match` picks HRRR/GFS/ECMWF/ICON/GEM etc. per location | Every 60 min (grid of 25 points) | Free for non-commercial use, CC BY 4.0 attribution; API key for commercial; self-hostable |
+| [Open-Meteo forecast API](https://open-meteo.com/en/docs) | Wind, gusts, direction (kn), MSL pressure, temperature, dew point, humidity, precipitation and its probability, cloud, visibility, CAPE, weather code, day/night | Global; `best_match` picks HRRR/GFS/ECMWF/ICON/GEM etc. per location | Every 60 min (grid of 25 points) | Free for non-commercial use, CC BY 4.0 attribution; API key for commercial; self-hostable |
 | [Open-Meteo marine API](https://open-meteo.com/en/docs/marine-weather-api) | Significant wave height/direction/period, wind-sea, primary swell, ocean current, sea surface temperature | Oceans (ECMWF WAM, MFWAM, GFS-Wave, ...). **Not** the Great Lakes or inland lakes. Coarse near coasts. | With the forecast | As above |
 | [NWS API](https://www.weather.gov/documentation/services-web-api) `/points`, `/gridpoints` | Forecaster-edited wind and **wave grids**, including the **Great Lakes** | US land and coastal/lake waters | With the forecast | Public domain; requires a User-Agent with contact |
 | NWS `/alerts/active?point=` | Small Craft Advisory, Gale/Storm Warnings, Special Marine Warnings, ... | US | Every 10 min (uses the bandwidth reserve) | Public domain |
 | NWS `/zones`, `/products` (NSH, CWF, GLF) | Text forecast for the boat's marine zone | US coastal and Great Lakes zones | Every 60 min | Public domain |
 | [NDBC](https://www.ndbc.noaa.gov/) `latest_obs.txt` | Nearest buoy / C-MAN observations: wind, gusts, waves, pressure + tendency, temperatures | Mostly US and partner platforms worldwide; many Great Lakes buoys are seasonal (spring to autumn) | Every 30 min | Public domain |
 | [NOAA CO-OPS](https://api.tidesandcurrents.noaa.gov/api/prod/) | Tide high/low and hourly heights (MLLW), tidal current max/slack | US coasts (none on the Great Lakes) | Every 6 h | Public domain |
+
+The Forecast tab downloads nothing of its own: sky, chance of rain, highs and lows come
+from the same hourly forecast (WMO weather codes as reported by Open-Meteo), and sunrise
+and sunset are computed on the phone.
 
 ### Radar tab pictures
 

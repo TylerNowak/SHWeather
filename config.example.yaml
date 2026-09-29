@@ -1,4 +1,4 @@
-# SHWeatherService configuration.
+# SHWeather configuration.
 # Copy to config.yaml (development) or /etc/shweather/config.yaml (Raspberry Pi install).
 # Every setting is optional; the defaults are shown. Check the result with:  shweather config
 
@@ -25,7 +25,7 @@ api_token:
 
 forecast:
   refresh_minutes: 60         # re-download the forecast grid this often when online
-  forecast_days: 5            # 1-16
+  forecast_days: 5            # 1-16; also how many days the Forecast tab shows
   models: best_match          # Open-Meteo model id(s): best_match, ecmwf_ifs025, gfs_seamless, ...
   grid:
     steps: 2                  # 2 -> 5x5 points around the boat

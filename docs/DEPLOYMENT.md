@@ -1,6 +1,6 @@
 # Deployment
 
-SHWeatherService runs on **Raspberry Pi OS / Linux** (systemd service) or **Windows 10/11**
+SHWeather runs on **Raspberry Pi OS / Linux** (systemd service) or **Windows 10/11**
 (background service that starts at boot). Both keep working offline; phones and tablets
 connect to it over the boat network.
 
@@ -233,7 +233,7 @@ whatever `config.yaml` says.
 
 ## Running behind a reverse proxy
 
-SHWeatherService serves the app at `/` and the API at `/api`. Proxy both unchanged; the
+SHWeather serves the app at `/` and the API at `/api`. Proxy both unchanged; the
 PWA uses relative URLs, so a sub-path such as `/weather/` also works. uvicorn is started
 with proxy headers enabled.
 

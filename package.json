@@ -1,9 +1,9 @@
 {
   "name": "shweather-web",
   "private": true,
-  "description": "Tests for the SHWeatherService PWA (web/). The app itself needs no build step.",
+  "description": "Tests for the SHWeather PWA (web/). The app itself needs no build step.",
   "type": "module",
   "scripts": {
-    "test": "node --test tests/web/units.test.mjs tests/web/radar.test.mjs"
+    "test": "node --test tests/web/units.test.mjs tests/web/radar.test.mjs tests/web/forecast.test.mjs"
   }
 }

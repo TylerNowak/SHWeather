@@ -17,7 +17,7 @@ from ..geo import bearing_deg, distance_nm
 from ..net import Http
 from . import NotApplicable, ProviderError
 
-APP = "SHWeatherService"
+APP = "SHWeather"
 
 
 def parse_gmt(s: str) -> float:

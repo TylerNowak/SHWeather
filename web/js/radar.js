@@ -515,7 +515,7 @@ function windColor(kn) {
 }
 
 function drawArrow(x, y, dirFrom, len, color, width = 2.2) {
-  // Points where the wind is going, like the arrows on the Weather tab.
+  // Points where the wind is going, like the arrows on the Wind tab.
   const a = (dirFrom + 180) * DEG;
   const dx = Math.sin(a) * len / 2;
   const dy = -Math.cos(a) * len / 2;
@@ -1209,7 +1209,7 @@ if (typeof document !== "undefined") document.addEventListener("visibilitychange
   }
 });
 
-/** New data from the Weather tab's polling (position, instruments, buoys). */
+/** New data from the app's polling (position, instruments, buoys). */
 export function radarUpdate() {
   if (!R.active) return;
   if (R.follow) {

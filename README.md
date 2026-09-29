@@ -9,8 +9,12 @@ official marine alerts, tides, and go / reef / no-go for *your* boat. Phones and
 on the boat's Wi-Fi open the **SHWeather** web app, with no app store and no cloud account.
 
 <p>
-  <img src="docs/img/phone.png" alt="Phone view: wind, pressure tendency, waves, alerts" width="260">
-  <img src="docs/img/desktop.png" alt="Tablet view: wind, waves and barometer charts" width="560">
+  <img src="docs/img/phone.png" alt="Wind tab on a phone: wind, pressure tendency, waves, alerts" width="260">
+  <img src="docs/img/desktop.png" alt="Wind tab on a tablet: wind, waves and barometer charts" width="560">
+</p>
+<p>
+  <img src="docs/img/forecast-phone.png" alt="Forecast tab on a phone: the next 24 hours, then five days with sky, chance of rain, low and high, wind and go / reef / no-go" width="260">
+  <img src="docs/img/forecast-desktop.png" alt="Forecast tab on a tablet: conditions now, this afternoon and tonight in words, the next 24 hours and the 5-day forecast" width="560">
 </p>
 <p>
   <img src="docs/img/radar-phone.png" alt="Radar tab on a phone: radar showers, satellite clouds, forecast wind arrows, buoys and range rings around the boat" width="260">
@@ -35,6 +39,12 @@ on the boat's Wi-Fi open the **SHWeather** web app, with no app store and no clo
 - **Regional upgrades.** Worldwide via Open-Meteo; in US waters also NWS alerts, marine
   zone forecasts, NDBC buoys and NOAA tides/currents. On the **Great Lakes**, where ocean
   wave models don't reach, waves come from NWS forecaster grids.
+- **Forecast tab.** A traditional forecast for where the boat is: sunny / cloudy / rain
+  with the chance of it, today's high and low and "feels like", today and tonight in words,
+  the next 24 hours, then day by day (5 days by default, up to 16) with wind and your
+  go / reef / no-go for each day. Built from the stored forecast, so it works offline.
+- **Wind tab.** The cockpit view: wind, gusts and direction, waves, barometer, alerts,
+  tides, buoys, and hour-by-hour charts.
 - **Radar tab.** A map around the boat with the last hour of radar and satellite
   cloud pictures, then the forecast's rain, cloud and wind arrows (coloured by your reef
   limits) hour by hour for two days, plus buoy reports. The server downloads and caches

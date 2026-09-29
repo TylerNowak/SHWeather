@@ -2,10 +2,11 @@
 // reach the Pi; API reads are network-first with the last good answer as fallback.
 // Requires a secure context (HTTPS or localhost); see docs/DEPLOYMENT.md.
 
-const VERSION = "shw-0.3.0";
+const VERSION = "shw-0.4.0";
 const SHELL = [
   "./", "index.html", "css/app.css", "manifest.webmanifest",
-  "js/app.js", "js/api.js", "js/charts.js", "js/dom.js", "js/radar.js", "js/settings.js", "js/text.js", "js/units.js",
+  "js/app.js", "js/api.js", "js/charts.js", "js/daily.js", "js/dom.js", "js/forecast.js", "js/radar.js", "js/settings.js",
+  "js/text.js", "js/units.js",
   "data/basemap.json",
   "icons/icon.svg", "icons/icon-192.png", "icons/icon-512.png", "icons/apple-touch-icon.png",
 ];

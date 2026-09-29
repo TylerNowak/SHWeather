@@ -29,7 +29,20 @@
   rules, missing rule)
 - Text responses gzip-compressed
 
-## Next (v0.4): verify and harden
+## v0.4
+
+- **Forecast tab**: a traditional forecast for the boat's position. Now (sky, temperature,
+  feels like, today's high and low, today / tonight in words), the next 24 hours with
+  sunrise and sunset, and a row per day (up to 16, as many as the server downloads) with
+  high and low on a range bar, the sky, the chance of rain, wind and the day's worst
+  go / reef / no-go; each day opens into day and night text, four parts of the day and
+  the day's facts. Worked out on the phone from the stored forecast, so it works offline.
+- The **Weather** tab is now **Wind** (old `#weather` links still open it)
+- Demo mode plays out five days: a cold front, a clear high with morning fog, a warm-up
+  and a rainy low
+- Wind tab charts scale to the hours on screen
+
+## Next (v0.5): verify and harden
 
 - [ ] Run every provider against the live services and replace doc-based fixtures with
       recorded responses (see [DATA_SOURCES.md](DATA_SOURCES.md) verification table),

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Install SHWeatherService on Raspberry Pi OS (Bookworm or newer) or any Debian-like system.
+# Install SHWeather on Raspberry Pi OS (Bookworm or newer) or any Debian-like system.
 #
 #   sudo ./deploy/install.sh                  # core
 #   sudo ./deploy/install.sh --serial         # + NMEA 0183 over USB/RS-422

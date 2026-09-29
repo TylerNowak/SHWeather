@@ -288,6 +288,8 @@ async def test_five_minute_sources_keep_their_loop_between_refreshes(tmp_path):
     c = {f.time for f in (await svc.imagery._list_radar(t0 + 600)).frames}
     assert all(t % 600 == 0 for t in a | b | c)
     assert len(a & b) >= 6 and len(a & c) >= 6
+    # The loop is as long whether or not the newest frame falls on a mark.
+    assert len(a) == len(b) == len(c) == 7
     await svc.aclose()
 
 

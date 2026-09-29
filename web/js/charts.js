@@ -28,7 +28,11 @@ function decimalsOf(step) {
 function yDomain(series, opts) {
   let lo = Infinity;
   let hi = -Infinity;
-  for (const sr of series) for (const [, v] of sr.points) if (v != null) { lo = Math.min(lo, v); hi = Math.max(hi, v); }
+  // Scale to what is on screen (plus an hour each side), not to every point passed in.
+  const [t0, t1] = opts.xDomain;
+  for (const sr of series) {
+    for (const [t, v] of sr.points) if (v != null && t >= t0 - 3600 && t <= t1 + 3600) { lo = Math.min(lo, v); hi = Math.max(hi, v); }
+  }
   if (!Number.isFinite(lo)) return null;
   if (opts.yMin !== undefined && opts.yMin !== null) lo = Math.min(lo, opts.yMin);
   if (opts.minSpan && hi - lo < opts.minSpan) {
@@ -119,6 +123,10 @@ function render(container, opts) {
   const [t0, t1] = opts.xDomain;
   const x = (t) => M.left + ((t - t0) / (t1 - t0)) * (W - M.left - M.right);
   const dom = yDomain(series, opts);
+  if (!dom) {
+    clear(container).append(h("p", { class: "chart-empty", text: opts.emptyText || "No data for this time range." }));
+    return;
+  }
   const y = (v) => top + plotH - ((v - dom.lo) / (dom.hi - dom.lo)) * plotH;
   const baseY = top + plotH;
 
@@ -195,7 +203,7 @@ function render(container, opts) {
   for (const sr of series) {
     if (sr.endLabel === false) continue;
     const last = [...sr.points].reverse().find((p) => p[1] != null && p[0] <= t1);
-    if (!last) continue;
+    if (!last || last[0] < t0) continue;          // nothing of this series on screen
     const lx = x(last[0]);
     const ly = y(last[1]);
     svg.append(s("circle", { class: "end-dot", cx: lx, cy: ly, r: 4, fill: sr.color }));
@@ -225,7 +233,9 @@ function render(container, opts) {
   const hit = s("rect", { x: M.left, y: 0, width: W - M.left - M.right, height: H, fill: "transparent" });
   svg.append(hit);
 
-  const times = opts.hoverTimes || [...new Set(series.flatMap((sr) => sr.points.map((p) => p[0])))].sort((a, b) => a - b);
+  // Hover and keyboard stepping stay within the hours on screen.
+  const times = (opts.hoverTimes || [...new Set(series.flatMap((sr) => sr.points.map((p) => p[0])))].sort((a, b) => a - b))
+    .filter((t) => t >= t0 && t <= t1);
   let idx = -1;
   const tip = $("#tooltip");
 

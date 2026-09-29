@@ -257,8 +257,11 @@ class Imagery:
         newest = past[-1]
         if self.saver():
             return [newest]
-        start = newest.time - self.cfg.loop_minutes * 60
-        on_marks = [f for f in past if f.time % step_s == 0 and f.time >= start]
+        marks = [f for f in past if f.time % step_s == 0]
+        # Count the loop back from the newest mark, so it has the same length whether or not
+        # the newest frame falls on one.
+        start = (marks[-1] if marks else newest).time - self.cfg.loop_minutes * 60
+        on_marks = [f for f in marks if f.time >= start]
         if not on_marks:                       # a source with frames off the marks: space them out
             last = None
             for f in reversed(past):

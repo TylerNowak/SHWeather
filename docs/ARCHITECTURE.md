@@ -1,10 +1,11 @@
 # Architecture
 
-SHWeatherService is a self-hosted marine weather station that runs **on the boat**, on a
+SHWeather is a self-hosted marine weather station that runs **on the boat**, on a
 Raspberry Pi or a Windows PC. It pulls forecasts whenever it has a connection, keeps
 working when it doesn't, and blends those forecasts with the boat's own instruments to
 give a local, sailing-grade picture of what the wind, sea and sky are doing. Phones and
-tablets use it through the **SHWeather** web app it serves.
+tablets use it through the web app it serves. (On Windows it installs under the name
+SHWeatherService: folders, scheduled task and firewall rules.)
 
 > **Not for navigation.** Model data is coarse near coasts and wrong sometimes. This
 > software supplements, and never replaces, official forecasts, a working barometer and
@@ -149,6 +150,29 @@ the app (`PUT /api/bandwidth`, persisted in SQLite):
 - *Data saver* (`saver`): 3×3 grid, 3-day forecast, no NWS gridpoint where ocean wave
   data exists, and fetch intervals stretched 1.5-4×.
 
+**Forecast tab.** A traditional forecast (today, the next 24 hours, then one row per day
+with the high, the low, the sky and the chance of rain) built on the phone from the same
+hourly forecast the Wind tab uses (`GET /api/forecast?hours=384&past_hours=24`), so it
+works offline and costs no extra download. `web/js/daily.js` does the work in plain
+functions (tested in Node):
+
+- *Conditions* come from the WMO weather code of each hour (Open-Meteo), with sky cover
+  refined by cloud %. A day or a period takes thunder if any hour has it, else rain, snow
+  or drizzle if it lasts two hours or more, else fog if it lasts a quarter of the time
+  ("Morning fog, then sunny"), else the average cloud cover of the daylight hours.
+  Chances are worded the NWS way from the probability of precipitation: slight chance
+  (<25%), chance (<55%), likely (<75%), then plain "Rain".
+- *Days* are the phone's calendar days, midnight to midnight; today keeps its past hours
+  so its high and low cover the whole day. A later day is listed only if the forecast
+  reaches its afternoon, so how many days appear follows `forecast.forecast_days` (5 by
+  default, 3 in data-saver mode, up to 16).
+- *Periods* (day 06-18, night 18-06) are worded like a forecaster's text: sky or
+  precipitation with its timing, high or low, wind range with a change of direction
+  ("SW 10 to 15 kn, becoming NW") and gusts, rain total. The worst go / reef / no-go hour
+  of each day comes from the server's assessment.
+- *Sunrise and sunset* use the NOAA sunrise equation at the forecast position; *feels
+  like* is the NWS wind chill or heat index.
+
 **Radar tab.** One north-up map (Web Mercator, drawn on a canvas) around the boat, with a
 timeline that runs from the last hour of observations into the forecast:
 
@@ -227,12 +251,13 @@ server/shweather/
   providers/      open_meteo, nws, ndbc, coops: fetch + normalise
   sensors/        nmea0183 parser, readers (tcp/udp/serial/file), signalk, bme280, hub
   analysis/       beaufort, pressure, zambretti, wind (true wind), nowcast, conditions
-web/              SHWeather PWA (index.html, js/, css/, sw.js, manifest); js/units.js = unit systems,
-                  js/radar.js = Radar tab, data/basemap.json = offline land map
+web/              SHWeather PWA (index.html, js/, css/, sw.js, manifest); js/app.js = Wind tab + routing,
+                  js/forecast.js + js/daily.js = Forecast tab, js/radar.js = Radar tab,
+                  js/units.js = unit systems, data/basemap.json = offline land map
 tools/            build_basemap.py (Natural Earth -> web/data/basemap.json)
 deploy/           systemd unit, Raspberry Pi install script
 deploy/windows/   install.ps1, run-service.ps1 (supervisor), shweather-service.ps1, uninstall.ps1
-tests/            pytest suite with recorded-format fixtures
+tests/            pytest suite with recorded-format fixtures; tests/web: Node tests for the PWA
 ```
 
 ## API (v0)
@@ -241,7 +266,7 @@ tests/            pytest suite with recorded-format fixtures
 |---|---|---|
 | GET | `/api/status` | Version, position and its source, per-source health, sensor freshness, data usage |
 | GET | `/api/now` | Cockpit snapshot: instruments + forecast now + tendency + Zambretti + alerts + assessment |
-| GET | `/api/forecast?lat=&lon=&hours=` | Hourly interpolated forecast, local-corrected, with per-hour go/no-go |
+| GET | `/api/forecast?lat=&lon=&hours=&past_hours=` | Hourly interpolated forecast, local-corrected, with per-hour go/no-go (Wind and Forecast tabs) |
 | GET | `/api/observations?metrics=&hours=` | Onboard time series (barograph, wind history) |
 | GET | `/api/alerts` | Active NWS alerts for the position |
 | GET | `/api/marine-text` | NWS marine zone forecast text |

@@ -4,6 +4,7 @@
 import { api } from "./api.js";
 import { lineChart } from "./charts.js";
 import { $, ago, clear, compass, dayLongLabel, dirArrow, h, hourShort, isoToEpoch, LEVELS, levelIcon, store, whenLabel } from "./dom.js";
+import { forecastMissing, forecastNow, forecastStatus, renderForecast } from "./forecast.js";
 import { initRadar, radarUnitsChanged, radarUpdate, showRadar } from "./radar.js";
 import { openSettings, setTheme } from "./settings.js";
 import * as T from "./text.js";
@@ -397,6 +398,7 @@ function renderMarineText(data) {
 function renderStatus() {
   const st = state.status;
   if (!st) return;
+  forecastStatus(st);
   if (U.setServerDefault(st.display)) renderAll(); // server's default units changed what we show
   $("#demo-banner").hidden = !st.demo;
   const box = clear($("#sources"));
@@ -414,7 +416,7 @@ function renderStatus() {
   for (const [name, sen] of Object.entries(st.sensors || {})) {
     box.append(h("span", { class: `source ${sen.connected ? "ok" : "err"}`, title: sen.error || "" }, h("span", { class: "dot" }), name));
   }
-  $("#version").textContent = `SHWeatherService ${st.version}`;
+  $("#version").textContent = `SHWeather ${st.version}`;
 }
 
 // ------------------------------------------------------------------ loading
@@ -435,6 +437,7 @@ async function loadNow() {
       state.lastContact = Date.now();
     }
     renderNow();
+    try { forecastNow(state.now); } catch (err) { console.error("Forecast tab:", err); }  // never costs the other tabs
     radarUpdate();
   } catch (e) {
     state.error = e;
@@ -444,15 +447,23 @@ async function loadNow() {
   renderConn();
 }
 
+// One download serves both tabs: the Wind tab shows up to 4 days ahead, the Forecast tab
+// every day the server has (5 by default, up to 16), and today's high and low need the
+// hours since midnight.
 async function loadForecast() {
   try {
-    const [fc, obs] = await Promise.all([api.forecast(96, 6), api.observations("tws_kn,pressure_hpa", 30)]);
+    const [fc, obs] = await Promise.all([api.forecast(16 * 24, 24), api.observations("tws_kn,pressure_hpa", 30)]);
     state.forecast = fc;
     state.obs = obs;
     renderCharts();
+    renderForecast({ forecast: fc, now: state.now });
   } catch (e) {
     if (e.status === 404) {
-      clear($("#wind-chart")).append(h("p", { class: "chart-empty", text: "No forecast downloaded yet. It downloads automatically when the server has internet." }));
+      const text = "No forecast downloaded yet. It downloads automatically when the server has internet.";
+      clear($("#wind-chart")).append(h("p", { class: "chart-empty", text }));
+      forecastMissing(text);
+    } else if (!state.forecast) {
+      forecastMissing("Can't reach the weather server, and this phone has no saved forecast yet.");
     }
   }
 }
@@ -478,19 +489,25 @@ function renderAll() {
   renderUnitsToggle();
   renderNow();
   if (state.forecast) renderCharts();
+  renderForecast();
   renderSide();
   radarUnitsChanged();
 }
 
-// ------------------------------------------------------------------ views (Weather / Radar tabs)
+// ------------------------------------------------------------------ views (Wind / Forecast / Radar tabs)
 
-const currentView = () => (location.hash === "#radar" ? "radar" : "weather");
+const VIEWS = ["wind", "forecast", "radar"];
+
+function currentView() {
+  const v = location.hash.slice(1);
+  return VIEWS.includes(v) ? v : "wind";     // also old "#weather" bookmarks
+}
 
 function applyView() {
+  if (location.hash === "#weather") history.replaceState(null, "", "#wind");
   const view = currentView();
   const radar = view === "radar";
-  $("#view-weather").hidden = radar;
-  $("#view-radar").hidden = !radar;
+  for (const v of VIEWS) $(`#view-${v}`).hidden = v !== view;
   document.body.classList.toggle("radar-open", radar);
   for (const a of document.querySelectorAll(".tabs .tab")) {
     if (a.dataset.view === view) a.setAttribute("aria-current", "page");

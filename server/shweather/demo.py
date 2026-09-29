@@ -7,6 +7,8 @@ the app without a boat or an internet connection.
 
 The scenario is a cold front passing ~9 h after start: southerly breeze building ahead of
 it, a falling barometer, a thunderstorm line at the front, then a gusty north-westerly.
+The days after (for the Forecast tab): a clear high with fog one morning, a warm-up in
+southerly return flow, then a low with steady rain.
 The simulated instruments read ~20% more wind than the "forecast", so the local correction
 (nowcast) visibly kicks in.
 """
@@ -54,32 +56,45 @@ class Scenario:
         sig = 1.0 / (1.0 + math.exp(-x / 1.5))
         local_h = ((t / HOUR) + lon / 15.0) % 24
         diurnal = math.sin(2 * math.pi * (local_h - 10) / 24)
+        # The days after the front, for the Forecast tab: high pressure and clear skies
+        # (with fog one morning), a warm-up in southerly return flow, then a low with steady rain.
+        high = math.exp(-((x - 36) / 14) ** 2)
+        warm = math.exp(-((x - 70) / 16) ** 2)
+        low = math.exp(-((x - 86) / 7) ** 2)
         speed = max(0.5, 9 + 13 * math.exp(-(x / 5) ** 2) + 7 * sig * math.exp(-max(x, 0) / 16)
-                    + 2 * diurnal + (lat - self.lat0) * 4)
-        direction = (210 + 95 * sig + 5 * math.sin(t / HOUR / 3)) % 360
+                    + 2 * diurnal + (lat - self.lat0) * 4 - 4 * high + 7 * low)
+        direction = (210 + 95 * sig - 125 * math.exp(-((x - 80) / 14) ** 2) + 5 * math.sin(t / HOUR / 3)) % 360
         gust = speed * (1.3 + 0.25 * math.exp(-(x / 2) ** 2))
-        pressure = 1016 + 0.06 * x - 11 * math.exp(-(x / 7) ** 2) + (lat - self.lat0) * 1.5
-        temp = 21 - 8 * sig + 3 * math.sin(2 * math.pi * (local_h - 9) / 24)
-        dew = 15 - 9 * sig
+        pressure = (1016 + 0.06 * x - 11 * math.exp(-(x / 7) ** 2) + (lat - self.lat0) * 1.5
+                    + 7 * high - 9 * low)
+        temp = 21 - 8 * sig + 6 * warm + (3 + 2 * high) * math.sin(2 * math.pi * (local_h - 9) / 24)
+        dew = 15 - 9 * sig + 6 * warm
         rh = 100 * math.exp(17.625 * dew / (243.04 + dew)) / math.exp(17.625 * temp / (243.04 + temp))
-        precip = 3.5 * math.exp(-(x / 1.2) ** 2) + 0.4 * math.exp(-((x - 4) / 3) ** 2)
-        cloud = 25 + 70 * math.exp(-(x / 5) ** 2)
+        precip = 3.5 * math.exp(-(x / 1.2) ** 2) + 0.4 * math.exp(-((x - 4) / 3) ** 2) + 2.2 * low
+        cloud = max(0.0, min(100.0, 25 + 70 * math.exp(-(x / 5) ** 2) - 25 * high
+                             + 75 * math.exp(-((x - 84) / 10) ** 2) + 15 * math.sin(x / 5) * warm))
         cape = 1400 * math.exp(-((x + 1) / 3) ** 2)
-        vis = 24000 - 18000 * math.exp(-(x / 1.5) ** 2)
+        fog = 26 < x < 50 and 4 <= local_h < 9
+        vis = 400.0 if fog else 24000 - 18000 * math.exp(-(x / 1.5) ** 2) - 14000 * low
         if abs(x) < 1:
             code = 95
+        elif x > 40 and precip > 0.1:
+            code = 63 if precip >= 1 else 61
         elif precip > 0.5:
             code = 80
         elif precip > 0.1:
             code = 61
+        elif fog:
+            code = 45
         else:
-            code = 3 if cloud > 80 else 2 if cloud > 45 else 1
+            code = 3 if cloud > 80 else 2 if cloud > 45 else 1 if cloud > 15 else 0
         lake = in_great_lakes(lat, lon)
         wave = (0.2 + 0.0045 * speed ** 1.8) if lake else (0.3 + 0.0065 * speed ** 1.8)
         period = (2 + 0.17 * speed) if lake else (3 + 0.22 * speed)
         return {
             "wind": speed, "dir": direction, "gust": gust, "pressure": pressure, "temp": temp, "dew": dew,
-            "rh": min(100.0, rh), "precip": precip, "precip_prob": min(100.0, 10 + 90 * math.exp(-(x / 3) ** 2)),
+            "rh": min(100.0, rh), "precip": precip,
+            "precip_prob": min(100.0, 10 + 90 * math.exp(-(x / 3) ** 2) + 80 * math.exp(-((x - 85) / 9) ** 2)),
             "cloud": cloud, "cape": cape, "vis": vis, "code": code, "is_day": 1 if 6 <= local_h < 19 else 0,
             "wave": wave, "period": period, "wave_dir": direction,
             "swell": None if lake else 0.8, "swell_period": None if lake else 11.0, "swell_dir": None if lake else 250.0,

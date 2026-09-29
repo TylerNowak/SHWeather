@@ -77,7 +77,7 @@ class Http:
         # parallel downloads (e.g. radar tiles) can't each spend the same remaining budget.
         self._pending = 0     # wire bytes of unfinished downloads
         self._consumed = 0    # wire bytes downloaded by this process (only ever grows)
-        ua = (f"SHWeatherService/{__version__} "
+        ua = (f"SHWeather/{__version__} "
               f"(+https://github.com/TylerNowak/SHWeather; {settings.sources.contact})")
         self.client = httpx.AsyncClient(
             timeout=settings.sources.timeout_s,

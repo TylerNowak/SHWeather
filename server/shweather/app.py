@@ -148,7 +148,7 @@ def create_app(settings: Settings | None = None, service: WeatherService | None 
         svc = service or build_service(settings)
         app.state.service = svc
         tasks = background_tasks(svc) if start_background else []
-        log.info("SHWeatherService %s started (demo=%s)", __version__, settings.demo)
+        log.info("SHWeather %s started (demo=%s)", __version__, settings.demo)
         try:
             yield
         finally:
@@ -163,7 +163,7 @@ def create_app(settings: Settings | None = None, service: WeatherService | None 
                 svc.db.add_observations(rows)
             await svc.aclose()
 
-    app = FastAPI(title="SHWeatherService", version=__version__, description=DESCRIPTION, lifespan=lifespan)
+    app = FastAPI(title="SHWeather", version=__version__, description=DESCRIPTION, lifespan=lifespan)
     app.add_middleware(TextGzip)
     app.include_router(router)
     web_root = settings.resolved_web_root()

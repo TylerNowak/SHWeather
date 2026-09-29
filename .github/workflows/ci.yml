@@ -33,7 +33,7 @@ jobs:
           node-version: 22
       - name: Syntax-check the PWA modules
         run: for f in web/js/*.js web/sw.js; do cp "$f" /tmp/check.mjs && node --check /tmp/check.mjs || exit 1; done
-      - name: Unit-system tests
+      - name: Web app tests (units, radar, forecast)
         run: npm test
 
   windows-scripts:

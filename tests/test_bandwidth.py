@@ -38,7 +38,7 @@ async def test_user_agent_and_byte_accounting(tmp_path):
 
     http = make_http(tmp_path, handler)
     await http.get("https://example.org/a")
-    assert "SHWeatherService/" in agents[0] and "admin@example.com" in agents[0]
+    assert "SHWeather/" in agents[0] and "admin@example.com" in agents[0]
     assert http.bytes_today() == 1234 and http.bytes_month() == 1234
     await http.aclose()
 

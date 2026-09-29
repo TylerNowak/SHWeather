@@ -1,6 +1,6 @@
 # Hardware
 
-SHWeatherService runs on a **Raspberry Pi** (the lightest option) or on any **Windows 10/11
+SHWeather runs on a **Raspberry Pi** (the lightest option) or on any **Windows 10/11
 PC** already aboard, such as a nav-station PC running OpenCPN or a small fanless mini PC.
 
 ## Raspberry Pi
@@ -8,7 +8,7 @@ PC** already aboard, such as a nav-station PC running OpenCPN or a small fanless
 | Board | Verdict |
 |---|---|
 | Pi 5 / Pi 4 (2 GB+) | Recommended. Room for Signal K / OpenPlotter alongside. |
-| Pi 3B+ | Fine for SHWeatherService alone. |
+| Pi 3B+ | Fine for SHWeather alone. |
 | Pi Zero 2 W | Works (512 MB RAM); keep the forecast grid at the default size. |
 
 Expected footprint: one Python process, roughly 60-90 MB RAM, near-idle CPU except for a
@@ -43,7 +43,7 @@ Setup is in [DEPLOYMENT.md](DEPLOYMENT.md#windows-10--11). Things that differ fr
 
 ## Storage
 
-Use a high-endurance microSD card or, on Pi 4/5, a USB or NVMe SSD. SHWeatherService
+Use a high-endurance microSD card or, on Pi 4/5, a USB or NVMe SSD. SHWeather
 writes sensor data once a minute in batches, so the database stays small (tens of MB for
 60 days of observations). The Radar tab's picture cache adds up to `imagery.cache_mb`
 (200 MB by default); pictures older than 6 hours are deleted.
@@ -71,13 +71,13 @@ temperature, humidity transducers). Everything else, including AIS, is ignored.
 
 The simplest route for NMEA 2000 is a **Signal K server** (for example via
 [OpenPlotter](https://openmarine.net/openplotter)) with a CAN HAT such as PICAN-M, or a
-USB gateway. Point SHWeatherService at it with the `signalk` section; it polls the REST
+USB gateway. Point SHWeather at it with the `signalk` section; it polls the REST
 API every 2 s. If Signal K's derived-data plugin computes true wind, that is used directly.
 
 ### True wind
 
 Forecasts predict wind over the ground. If your instruments only report apparent wind,
-SHWeatherService derives true wind from apparent wind plus SOG/COG (or STW and heading),
+SHWeather derives true wind from apparent wind plus SOG/COG (or STW and heading),
 the same maths as a chartplotter. With no heading sensor it assumes heading = COG, which
 is fine except when moving slowly in a strong current.
 
