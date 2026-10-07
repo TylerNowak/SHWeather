@@ -76,4 +76,11 @@ host="$(hostname).local"
 port="$(awk '/^port:/ {print $2}' "$CONF_DIR/config.yaml" 2>/dev/null)"
 echo
 echo "Done. Open http://$host:${port:-8080} on a phone or tablet on the boat network."
+https_port="$(awk '/^https_port:/ {print $2}' "$CONF_DIR/config.yaml" 2>/dev/null)"
+if [[ -z "$https_port" ]]; then https_port=8443; [[ "${port:-8080}" == "8443" ]] && https_port=9443; fi
+if [[ "$https_port" != "0" ]]; then
+  echo "Phones can share their own GPS only over HTTPS: https://$host:$https_port"
+  echo "  (the first visit warns about the certificate the server made itself: continue, or"
+  echo "  install it from the app's Settings > Secure connection to get no warning)"
+fi
 echo "Logs: journalctl -u shweather -f     Config: $CONF_DIR/config.yaml"

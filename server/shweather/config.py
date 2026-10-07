@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Literal
 
 import yaml
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class Position(BaseModel):
@@ -171,6 +171,18 @@ class Settings(BaseModel):
     data_dir: Path = Path("./data")
     host: str = "0.0.0.0"
     port: int = 8080
+    https_port: int = Field(
+        8443, ge=0, le=65535,
+        description="Also serve the app over HTTPS on this port, so phones can share their GPS "
+                    "(browsers require HTTPS for it); 0 = HTTP only")
+    tls_cert: Path | None = Field(
+        None, description="Your own HTTPS certificate (PEM, full chain), e.g. from 'tailscale cert'; "
+                          "empty = the server makes one")
+    tls_key: Path | None = Field(None, description="Private key for tls_cert (PEM)")
+    tls_names: list[str] = Field(
+        default_factory=list,
+        description="Extra local names or addresses for the server-made certificate (.local, .lan, "
+                    ".home.arpa, .internal or a private IP); its own addresses are found automatically")
     home: Position | None = Field(None, description="Fallback position when no GPS fix is available")
     demo: bool = Field(False, description="Serve synthetic data without touching the network")
     web_root: Path | None = None
@@ -189,12 +201,27 @@ class Settings(BaseModel):
     display: DisplayConfig = DisplayConfig()
     imagery: ImageryConfig = ImageryConfig()
 
-    @field_validator("data_dir", "web_root", "log_file", mode="before")
+    @field_validator("data_dir", "web_root", "log_file", "tls_cert", "tls_key", mode="before")
     @classmethod
     def _expand(cls, v):
         if v is None or v == "":
             return None
         return Path(os.path.expandvars(os.path.expanduser(str(v))))
+
+    @field_validator("tls_names", mode="before")
+    @classmethod
+    def _names(cls, v):
+        return [] if v is None or v == "" else v
+
+    @model_validator(mode="after")
+    def _https(self):
+        if self.https_port and self.https_port == self.port:
+            if "https_port" in self.model_fields_set:
+                raise ValueError(f"https_port and port are both {self.port}; give HTTPS its own port (e.g. 8443) or 0 for none")
+            self.https_port = 8444 if self.port == 9443 else 9443   # the web app already uses the default
+        if bool(self.tls_cert) != bool(self.tls_key):
+            raise ValueError("tls_cert and tls_key go together: set both (your own certificate) or neither")
+        return self
 
     def resolved_web_root(self) -> Path:
         if self.web_root:
@@ -237,7 +264,7 @@ def load_settings(path: str | os.PathLike | None = None) -> Settings:
     settings = Settings.model_validate(data)
     if cfg:
         base = cfg.resolve().parent
-        for name in ("data_dir", "web_root", "log_file"):
+        for name in ("data_dir", "web_root", "log_file", "tls_cert", "tls_key"):
             value = getattr(settings, name)
             if value is not None and not value.is_absolute():
                 setattr(settings, name, base / value)

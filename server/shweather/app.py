@@ -23,6 +23,7 @@ from .sensors.bme280 import run_bme280
 from .sensors.readers import run_nmea_source
 from .sensors.signalk import run_signalk
 from .service import WeatherService
+from .tls import HttpsListener
 
 log = logging.getLogger(__name__)
 
@@ -140,7 +141,9 @@ class PWAStaticFiles(StaticFiles):
 
 
 def create_app(settings: Settings | None = None, service: WeatherService | None = None,
-               start_background: bool = True) -> FastAPI:
+               start_background: bool = True, serve_https: bool = False) -> FastAPI:
+    """The web app and API. ``serve_https`` also serves it over HTTPS on ``https_port``
+    (``shweather serve`` does; tests don't)."""
     settings = settings or load_settings()
 
     @asynccontextmanager
@@ -148,10 +151,15 @@ def create_app(settings: Settings | None = None, service: WeatherService | None 
         svc = service or build_service(settings)
         app.state.service = svc
         tasks = background_tasks(svc) if start_background else []
+        https = HttpsListener(app, settings, svc) if serve_https and settings.https_port else None
+        if https:
+            https.start()
         log.info("SHWeather %s started (demo=%s)", __version__, settings.demo)
         try:
             yield
         finally:
+            if https:
+                await https.stop()
             for t in tasks:
                 t.cancel()
             for t in tasks:
@@ -161,6 +169,7 @@ def create_app(settings: Settings | None = None, service: WeatherService | None 
             rows = svc.hub.flush_minute()
             if rows:
                 svc.db.add_observations(rows)
+            svc.save_positions()
             await svc.aclose()
 
     app = FastAPI(title="SHWeather", version=__version__, description=DESCRIPTION, lifespan=lifespan)

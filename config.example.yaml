@@ -7,6 +7,15 @@
 data_dir: ./data              # SQLite database (/var/lib/shweather on the Pi, ProgramData on Windows)
 host: 0.0.0.0                 # listen on the boat network
 port: 8080
+# HTTPS for phones and tablets: browsers let the app use a device's own GPS (and keep an
+# offline copy of itself) only over HTTPS. The server makes its own certificate, for its
+# local addresses only, in data_dir/tls. Phones accept a warning once, or install the
+# certificate from the app (Settings > Secure connection) and get none. 0 = HTTP only.
+https_port: 8443
+tls_cert:                     # your own certificate instead (PEM, full chain), e.g. from `tailscale cert`
+tls_key:                      # and its private key
+tls_names: []                 # extra names for the server-made certificate: names ending in .local, .lan,
+                              # .home.arpa or .internal, or private IP addresses (its own are found automatically)
 web_root:                     # empty = the web/ folder next to the code
 log_level: info
 log_file:                     # e.g. logs/shweather.log (rotated at 5 MB); empty = console only
@@ -18,7 +27,8 @@ observation_retention_days: 60
 # shares a network with strangers (marina Wi-Fi); enter it in the app under Settings.
 api_token:
 
-# Fallback position when there is no GPS fix and no phone has sent one.
+# Fallback position when there is no GPS fix and no phone has sent one. Phones send theirs
+# while "Use this device's location" is on in the app (Settings > Position), over HTTPS.
 # home:
 #   lat: 41.90
 #   lon: -87.50

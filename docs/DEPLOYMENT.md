@@ -66,6 +66,7 @@ Options (combine as needed):
 | Option | Effect |
 |---|---|
 | `-Port 8090` | Web/API port (default 8080). On an existing install this moves the server to that port: it updates `config.yaml` and the firewall rule |
+| `-HttpsPort 9443` | Port of the secure address phones need to share their GPS (default 8443; a free one is picked if 8443 is taken). `0` turns HTTPS off. See *Phone GPS and HTTPS* |
 | `-NmeaUdpPort 10110` | Also open these UDP ports for broadcasting NMEA multiplexers |
 | `-AllowPublicNetworks` | Also accept connections on networks Windows calls *Public*. Windows 11 makes every new network Public until you change it; on your own network, switching it to Private is the better fix (see *Phones can't connect*). Set `api_token` if you do this on marina Wi-Fi. |
 | `-NoSerial` | Skip pyserial (USB/COM NMEA inputs) |
@@ -78,7 +79,7 @@ What it does:
 | App + its own virtualenv | `C:\Program Files\SHWeatherService` |
 | Config (`config.yaml`), database, logs | `C:\ProgramData\SHWeatherService` (kept on upgrade and uninstall; any local user can edit these without admin rights) |
 | Service | Scheduled task **SHWeatherService**, runs at boot as SYSTEM (no login needed), supervised by `run-service.ps1`, which restarts the server if it ever exits |
-| Firewall | Inbound rule group **SHWeatherService** for the web port (and NMEA UDP ports) on Private/Domain networks |
+| Firewall | Inbound rule group **SHWeatherService** for the web and HTTPS ports (and NMEA UDP ports) on Private/Domain networks |
 
 The installer first checks that the web port is free. If another program already uses it,
 the installer names that program, suggests a free port, and prints the command to run
@@ -194,29 +195,99 @@ service first, or use `sqlite3 shweather.db ".backup backup.db"` while it runs.
 
 ## Phones and tablets
 
-Open `http://<hostname>.local:8080` (or the server's IP address; the Windows installer prints them). On iOS use Share → Add
-to Home Screen; on Android, the browser menu → Install app / Add to Home screen.
+Open `http://<hostname>.local:8080` (or the server's IP address; the Windows installer prints them),
+or the secure `https://<hostname>.local:8443` to let the phone share its GPS (below). On iOS use
+Share → Add to Home Screen; on Android, the browser menu → Install app / Add to Home screen.
 
-### HTTPS and full PWA features
+### Phone GPS and HTTPS
 
-Browsers only allow **service workers** (the phone keeping its own offline copy of the
-app) and **the phone's GPS** on secure origins: HTTPS or `localhost`. Over plain
-`http://<hostname>.local` the app works normally while the phone can reach the server; it just can't
-cache itself on the phone or read the phone's GPS. (The server itself always works offline:
-that part never depends on HTTPS.)
+When the boat has no GPS on its network, a phone or tablet can be the GPS: in the app,
+**Settings > Position > Use this device's location**, then pick how often it sends its
+position (every 10 seconds to every hour; 1 minute by default). The choice is kept on that
+device. While the app is open on screen it reads the device's GPS at that rate and sends
+each fix to the server, which uses it for the forecast, tides, buoys and radar.
 
-Options, simplest first:
+- A GPS on the boat's network (NMEA, Signal K) always comes first; phones then stand by.
+- Fixes rougher than 10 km (a guess from the IP address) are never sent.
+- Browsers don't share location from the background, so polling pauses while the app is
+  hidden and picks up again as soon as it is back on screen. The server keeps the last
+  fix (up to a week) in the meantime.
+- The server keeps phone fixes in memory and writes one to the database only when the
+  boat has moved about 90 m or every ten minutes, so a phone sending every 10 seconds
+  doesn't wear out the Pi's SD card.
+- Typing a position in by hand switches that device's location off, so the next fix
+  doesn't overwrite it.
 
-1. **Stay on HTTP.** Fine when the server has a GPS or you set the position manually.
-2. **Tailscale** (`tailscale cert`) gives the server a real certificate for its
-   `*.ts.net` name. Phones need Tailscale installed; it keeps working on the boat LAN.
-3. **Your own domain + Let's Encrypt DNS challenge**, with a local DNS record pointing
-   to the server, served through Caddy or nginx in front of port 8080. The certificate renews
-   whenever the server is online.
-4. **A local CA** (e.g. `mkcert`) installed on every phone. Works fully offline, but
-   each device must trust the CA.
+**Browsers only give a page the device's location over HTTPS** (or on `localhost`), and
+only keep an offline copy of the app (a service worker) there too. So the server also
+serves the app over HTTPS, on `https_port` (8443 by default), next to plain HTTP:
 
-A built-in HTTPS helper is on the [roadmap](ROADMAP.md).
+```
+http://<server>:8080     works everywhere; no phone GPS, no offline copy
+https://<server>:8443    phone GPS and offline copy
+```
+
+There is no public certificate authority for a boat without a domain name or internet, so
+on first start the server makes its own, in `<data_dir>/tls`:
+
+- a small **certificate authority** (CA), valid for 10 years, restricted by *name
+  constraints* to private addresses (10/8, 172.16/12, 192.168/16, 100.64/10, 169.254/16,
+  loopback, IPv6 ULA) and local names (`.local`, `.lan`, `.home.arpa`, `.internal`,
+  `localhost`). Even someone who copied its key could not use it to pose as a real website
+  to a phone that trusts it;
+- a **server certificate** signed by that CA for the machine's local addresses,
+  `<hostname>.local` and anything in `tls_names`. It is re-signed by itself when the
+  addresses change (a new DHCP lease) and well before it expires (800 days, under Apple's
+  limit of 825).
+
+It takes about a second on a PC and a few seconds on a Pi, once; no `openssl` or
+`cryptography` package is needed.
+
+On each phone, either:
+
+1. **Accept the warning once.** Open the `https://` address; the browser says the
+   connection isn't private because it doesn't know the server's CA. Chrome: *Advanced >
+   Proceed*. Safari: *Show Details > visit this website*. The GPS then works; the offline
+   copy doesn't (browsers refuse service workers on a certificate they don't trust).
+2. **Or install the server's certificate** (no more warnings, offline copy works):
+   Settings > Secure connection > *Download the certificate*, then
+   - iPhone/iPad: open it in Safari, *Allow*; Settings > *Profile Downloaded* > Install;
+     then Settings > General > About > *Certificate Trust Settings* > full trust for
+     "SHWeather CA".
+   - Android: Settings > search "CA certificate" (Security > Encryption & credentials >
+     Install a certificate > CA certificate) and pick `SHWeather-CA.crt`.
+   - Windows: open the file > Install Certificate > Local Machine > *Trusted Root
+     Certification Authorities*. Mac: Keychain Access > Always Trust. Firefox has its own
+     store (Settings > Certificates > Import; use `/api/tls/ca.crt?format=pem`).
+
+   Settings shows the CA's SHA-256 fingerprint to compare with
+   `openssl x509 -in <data_dir>/tls/ca.crt -noout -fingerprint -sha256`.
+
+Browsers keep each address's settings apart, so set units, theme and the access token
+again on the `https://` address, and re-add the home-screen icon from there.
+
+Settings:
+
+```yaml
+https_port: 8443     # 0 = HTTP only
+tls_names: [boat.lan, 192.168.8.2]   # extra local names/addresses for the made certificate
+tls_cert:            # or your own certificate (PEM, full chain), e.g. from `tailscale cert`
+tls_key:             #   ...and its key; then nothing is made and no CA is offered
+```
+
+On Windows, `install.ps1` opens the HTTPS port in the firewall too, and picks a free port
+if 8443 is taken (`-HttpsPort 9443` chooses one, `-HttpsPort 0` turns HTTPS off).
+Deleting `<data_dir>/tls` makes a new CA on the next start; phones that installed the old
+one then need the new one.
+
+Other ways to HTTPS still work: Tailscale (`tailscale cert`, then `tls_cert`/`tls_key`),
+your own domain with a Let's Encrypt DNS challenge, or a reverse proxy (Caddy, nginx) in
+front of port 8080 with `https_port: 0`.
+
+**Key file permissions.** On Linux the keys are readable by the `shweather` user only. On
+Windows, `C:\ProgramData\SHWeatherService` is deliberately editable by every local user
+(see below), so anyone logged in to the PC can read the CA key. The name constraints limit
+what that key can do to impersonating this boat's network.
 
 ## Security on shared networks
 

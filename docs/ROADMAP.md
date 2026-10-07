@@ -42,13 +42,25 @@
   and a rainy low
 - Wind tab charts scale to the hours on screen
 
-## Next (v0.5): verify and harden
+## v0.5
+
+- **Phone GPS**: Settings > Position > *Use this device's location* polls the phone's or
+  tablet's GPS while the app is open, at a rate you choose (10 s to 1 h), and sends each
+  fix to the server; the boat's own GPS still comes first. Rough (IP-based) fixes are
+  ignored, the header says where the position comes from, and a banner says when the
+  browser blocks location.
+- **Built-in HTTPS** (`https_port`, 8443): the server makes its own CA (name-constrained
+  to the local network) and certificate, renews it when its addresses change, and offers
+  the CA for phones to install. Pure Python, no new dependencies. Windows installer opens
+  the port (`-HttpsPort`).
+
+## Next (v0.6): verify and harden
 
 - [ ] Run every provider against the live services and replace doc-based fixtures with
       recorded responses (see [DATA_SOURCES.md](DATA_SOURCES.md) verification table),
       including the radar and satellite picture sources
 - [ ] Measure real data usage per refresh and publish typical MB/day for each mode
-- [ ] Built-in HTTPS helper so phones get service-worker caching and GPS
+- [x] Built-in HTTPS so phones get service-worker caching and GPS (v0.5)
 - [ ] Test on real hardware: Pi Zero 2 W memory, a multiplexer, a BME280, Signal K
 - [ ] Test the Windows installer on a real Windows 10 and 11 machine (CI only parses it)
 - [ ] Optional: a real Windows service (services.msc) instead of a scheduled task

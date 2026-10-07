@@ -14,11 +14,12 @@ function Write-Step([string]$Message) {
     Write-Host "==> $Message" -ForegroundColor Cyan
 }
 
-function Get-ShwConfigPort([string]$ConfigPath, [int]$Default = 8080) {
+function Get-ShwConfigPort([string]$ConfigPath, [int]$Default = 8080, [string]$Key = 'port') {
+    # A top-level port setting from config.yaml: 'port' (the web app) or 'https_port'.
     try {
         if (Test-Path -LiteralPath $ConfigPath) {
             $text = [System.IO.File]::ReadAllText($ConfigPath)
-            $m = [regex]::Match($text, '(?m)^port:\s*(\d+)')
+            $m = [regex]::Match($text, '(?m)^' + [regex]::Escape($Key) + ':[ \t]*(\d+)')
             if ($m.Success) { return [int]$m.Groups[1].Value }
         }
     } catch { }
@@ -81,10 +82,11 @@ function Set-ShwConfigLine([string]$Text, [string]$Key, [string]$Value) {
     return $Text + $line + $nl
 }
 
-function New-ShwConfigText([string]$ExampleText, [int]$Port, [string]$InstallDir) {
+function New-ShwConfigText([string]$ExampleText, [int]$Port, [string]$InstallDir, [int]$HttpsPort = 8443) {
     # config.yaml for a Windows install, derived from config.example.yaml.
     $text = Set-ShwConfigLine $ExampleText 'data_dir' 'data                # relative to this file'
     $text = Set-ShwConfigLine $text 'port' "$Port"
+    $text = Set-ShwConfigLine $text 'https_port' "$HttpsPort"
     $webRoot = ($InstallDir.TrimEnd('\') + '\web').Replace('\', '/')
     $text = Set-ShwConfigLine $text 'web_root' "`"$webRoot`""
     $text = Set-ShwConfigLine $text 'log_file' 'logs/shweather.log  # rotated at 5 MB'
@@ -250,6 +252,19 @@ function Stop-Shw {
     @(Get-ShwProcesses) | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
 }
 
+function Test-ShwTcp([int]$Port, [int]$TimeoutMs = 2000) {
+    # Is something listening on this local port? (The HTTPS port: its certificate is the
+    # server's own, which Invoke-WebRequest in Windows PowerShell would refuse.)
+    $client = New-Object System.Net.Sockets.TcpClient
+    try {
+        return [bool]$client.ConnectAsync('127.0.0.1', $Port).Wait($TimeoutMs)
+    } catch {
+        return $false
+    } finally {
+        $client.Dispose()
+    }
+}
+
 function Test-ShwHttp([int]$Port, [int]$TimeoutSeconds = 3) {
     try {
         $r = Invoke-WebRequest -Uri "http://127.0.0.1:$Port/api/status" -UseBasicParsing -TimeoutSec $TimeoutSeconds
@@ -359,7 +374,7 @@ function Get-ShwBlockRules([string[]]$Programs) {
     return @($rules | Sort-Object -Property Name -Unique)
 }
 
-function Show-ShwNetworkCheck([int]$Port, [string]$InstallDir) {
+function Show-ShwNetworkCheck([int]$Port, [string]$InstallDir, [int]$HttpsPort = 0) {
     # Can phones reach the server? Prints the addresses to use, and anything in the way:
     # a network Windows treats as Public, a missing firewall rule, or a firewall Block rule
     # for the Python the service runs. Returns the number of problems found.
@@ -367,6 +382,7 @@ function Show-ShwNetworkCheck([int]$Port, [string]$InstallDir) {
     $nets = @(Get-ShwNetworks)
     if ($nets.Count -eq 0) {
         Write-Host ('    Could not list this PC''s networks. Phones use http://<this PC''s IP address>:' + $Port)
+        if ($HttpsPort) { Write-Host ('    or, to share their own GPS, https://<this PC''s IP address>:' + $HttpsPort) }
     } else {
         Write-Host '    On a phone or tablet on the same network, open:'
         foreach ($n in $nets) {
@@ -374,6 +390,12 @@ function Show-ShwNetworkCheck([int]$Port, [string]$InstallDir) {
             if ($n.Network) { $where += ', network "' + $n.Network + '"' }
             if ($n.Category) { $where += ', ' + $n.Category }
             Write-Host ('      http://{0}:{1}   ({2})' -f $n.Address, $Port, $where)
+        }
+        if ($HttpsPort) {
+            Write-Host '    Phones can share their own GPS only over the secure address (browsers require HTTPS):'
+            foreach ($n in $nets) { Write-Host ('      https://{0}:{1}' -f $n.Address, $HttpsPort) }
+            Write-Host '    The first visit shows a certificate warning, because the server made its certificate itself:'
+            Write-Host '    continue anyway, or install the certificate from the app (Settings > Secure connection).'
         }
     }
 
@@ -388,9 +410,13 @@ function Show-ShwNetworkCheck([int]$Port, [string]$InstallDir) {
         }
     }
     $webRule = $null
+    $httpsRule = $null
     foreach ($r in $ourRules) {
         $pf = $r | Get-NetFirewallPortFilter -ErrorAction SilentlyContinue
-        if ($pf -and [string]$pf.Protocol -eq 'TCP' -and @($pf.LocalPort | ForEach-Object { [string]$_ }) -contains [string]$Port) { $webRule = $r }
+        if (-not $pf -or [string]$pf.Protocol -ne 'TCP') { continue }
+        $ports = @($pf.LocalPort | ForEach-Object { [string]$_ })
+        if ($ports -contains [string]$Port) { $webRule = $r }
+        if ($HttpsPort -and $ports -contains [string]$HttpsPort) { $httpsRule = $r }
     }
     if (-not $webRule) {
         $problems++
@@ -398,6 +424,10 @@ function Show-ShwNetworkCheck([int]$Port, [string]$InstallDir) {
     } elseif ([string]$webRule.Enabled -ne 'True') {
         $problems++
         Write-Warning "The SHWeatherService firewall rule is turned off. Turn it on: Enable-NetFirewallRule -Group $($script:FirewallGroup)   (Administrator PowerShell)"
+    }
+    if ($HttpsPort -and $webRule -and -not $httpsRule) {
+        $problems++
+        Write-Warning "No firewall rule lets phones reach the secure (HTTPS) port $HttpsPort. Run install.ps1 again (with -HttpsPort $HttpsPort) to add it."
     }
 
     # Networks Windows calls Public, where the rule does not apply (unless -AllowPublicNetworks).
@@ -440,7 +470,8 @@ function Show-ShwNetworkCheck([int]$Port, [string]$InstallDir) {
         $products = @(Get-CimInstance -Namespace 'root/SecurityCenter2' -ClassName FirewallProduct -ErrorAction Stop |
                       ForEach-Object { [string]$_.displayName } | Where-Object { $_ })
         if ($products.Count -gt 0) {
-            Write-Host "    Note: $($products -join ', ') also filters the network. If phones can't connect, allow TCP port $Port there too."
+            $tcp = if ($HttpsPort) { "TCP ports $Port and $HttpsPort" } else { "TCP port $Port" }
+            Write-Host "    Note: $($products -join ', ') also filters the network. If phones can't connect, allow $tcp there too."
         }
     } catch { }
 

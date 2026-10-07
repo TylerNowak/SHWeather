@@ -15,6 +15,11 @@
 .PARAMETER Port
   Web/API port. Default 8080 for a new install; on an upgrade the port in the existing
   config.yaml is kept unless -Port is given, which changes it there (and in the firewall).
+.PARAMETER HttpsPort
+  Port for the secure (HTTPS) address phones need to share their own GPS. Default 8443 for
+  a new install; on an upgrade the https_port in config.yaml is kept unless -HttpsPort is
+  given. When the port is taken and -HttpsPort was not given, a free one is picked. 0 turns
+  HTTPS off.
 .PARAMETER NmeaUdpPort
   Also open these UDP ports, for NMEA multiplexers that broadcast (usually 10110).
 .PARAMETER AllowPublicNetworks
@@ -38,6 +43,7 @@
 [CmdletBinding()]
 param(
     [ValidateRange(1, 65535)][int]$Port = 8080,
+    [ValidateRange(0, 65535)][int]$HttpsPort = 8443,
     [int[]]$NmeaUdpPort = @(),
     [switch]$AllowPublicNetworks,
     [switch]$NoSerial,
@@ -57,6 +63,16 @@ $started = Get-Date
 # An existing config.yaml decides the port, unless -Port is given (which then updates it).
 $portGiven = $PSBoundParameters.ContainsKey('Port')
 if (-not $portGiven) { $Port = Get-ShwConfigPort $ConfigPath $Port }
+$httpsGiven = $PSBoundParameters.ContainsKey('HttpsPort')
+if (-not $httpsGiven) { $HttpsPort = Get-ShwConfigPort $ConfigPath $HttpsPort 'https_port' }
+$httpsMoved = $false
+if ($HttpsPort -eq $Port) {
+    if ($httpsGiven) {
+        throw "-HttpsPort and -Port are both $Port; HTTPS needs a port of its own (for example -HttpsPort 8443), or -HttpsPort 0 for none."
+    }
+    $HttpsPort = $(if ($Port -eq 9443) { 8444 } else { 9443 })   # the web app already has 8443
+    $httpsMoved = $true
+}
 $bindHost = Get-ShwConfigHost $ConfigPath
 
 function Find-Python([string]$Preferred) {
@@ -168,6 +184,34 @@ if ($portState -eq 'InUse' -or $portState -eq 'Reserved') {
     exit 1
 }
 
+# The HTTPS port: a busy one is replaced by a free one unless it was asked for by name.
+if ($HttpsPort -ne 0) {
+    Write-Step "Checking that port $HttpsPort (HTTPS) is free"
+    $httpsState = Wait-ShwPortFree $HttpsPort $bindHost
+    if ($httpsState -eq 'InUse' -or $httpsState -eq 'Reserved') {
+        $why = if ($httpsState -eq 'InUse') { 'is used by another program' } else { 'is reserved by Windows' }
+        if ($httpsGiven) {
+            $free = Find-ShwFreePort $bindHost @(@(8443, 9443, 8444, 10443, 4443) | Where-Object { $_ -ne $Port })
+            Write-Host ''
+            Write-Host "Port $HttpsPort $why, so HTTPS cannot use it." -ForegroundColor Red
+            if ($free) { Write-Host "Run the installer again with -HttpsPort $free (free), or -HttpsPort 0 for no HTTPS." }
+            else { Write-Host 'Run the installer again with another -HttpsPort, or -HttpsPort 0 for no HTTPS.' }
+            if ($wasInstalled) { Write-Host 'Nothing was changed. The SHWeather service stays stopped until you run the installer again.' }
+            else { Write-Host 'Nothing was installed.' }
+            exit 1
+        }
+        $free = Find-ShwFreePort $bindHost @(@(9443, 8444, 10443, 4443, 8445) | Where-Object { $_ -ne $Port })
+        if ($free) {
+            Write-Host "    port $HttpsPort $why; HTTPS will use port $free instead" -ForegroundColor Yellow
+            $HttpsPort = $free
+        } else {
+            Write-Warning "Port $HttpsPort $why and no spare port was found: HTTPS stays off (phones can't share their GPS). Re-run with -HttpsPort <free port> to turn it on."
+            $HttpsPort = 0
+        }
+        $httpsMoved = $true
+    }
+}
+
 try {
 # ---------------------------------------------------------------- copy the app
 if ($inPlace) {
@@ -252,7 +296,7 @@ foreach ($d in @($DataRoot, (Join-Path $DataRoot 'data'), (Join-Path $DataRoot '
 }
 if (-not (Test-Path -LiteralPath $ConfigPath)) {
     $example = [System.IO.File]::ReadAllText((Join-Path $InstallDir 'config.example.yaml'))
-    $text = New-ShwConfigText $example $Port $InstallDir
+    $text = New-ShwConfigText $example $Port $InstallDir $HttpsPort
     [System.IO.File]::WriteAllText($ConfigPath, $text, (New-Object System.Text.UTF8Encoding $false))
     Write-Host "    created $ConfigPath"
 } else {
@@ -266,6 +310,10 @@ if (-not (Test-Path -LiteralPath $ConfigPath)) {
     if ($portGiven -and (Get-ShwConfigPort $ConfigPath 0) -ne $Port) {
         $updated = Set-ShwConfigLine $updated 'port' "$Port"
         Write-Host "    port changed to $Port"
+    }
+    if (($httpsGiven -or $httpsMoved) -and (Get-ShwConfigPort $ConfigPath -1 'https_port') -ne $HttpsPort) {
+        $updated = Set-ShwConfigLine $updated 'https_port' "$HttpsPort"
+        Write-Host "    https_port set to $HttpsPort"
     }
     if ($updated -ne $text) {
         [System.IO.File]::WriteAllText($ConfigPath, $updated, (New-Object System.Text.UTF8Encoding $false))
@@ -290,6 +338,10 @@ if ($AllowPublicNetworks) { $profiles += 'Public' }
 Get-NetFirewallRule -Group $script:FirewallGroup -ErrorAction SilentlyContinue | Remove-NetFirewallRule
 New-NetFirewallRule -DisplayName "SHWeatherService web ($Port/tcp)" -Group $script:FirewallGroup `
     -Direction Inbound -Action Allow -Protocol TCP -LocalPort $Port -Profile $profiles | Out-Null
+if ($HttpsPort -ne 0) {
+    New-NetFirewallRule -DisplayName "SHWeatherService web HTTPS ($HttpsPort/tcp)" -Group $script:FirewallGroup `
+        -Direction Inbound -Action Allow -Protocol TCP -LocalPort $HttpsPort -Profile $profiles | Out-Null
+}
 foreach ($u in $NmeaUdpPort) {
     New-NetFirewallRule -DisplayName "SHWeatherService NMEA ($u/udp)" -Group $script:FirewallGroup `
         -Direction Inbound -Action Allow -Protocol UDP -LocalPort $u -Profile $profiles | Out-Null
@@ -321,7 +373,7 @@ for ($i = 0; $i -lt 30 -and -not $ok; $i++) {
 Write-Host ''
 if ($ok) {
     Write-Host "SHWeatherService is running. On this PC: http://localhost:$Port" -ForegroundColor Green
-    $null = Show-ShwNetworkCheck $Port $InstallDir
+    $null = Show-ShwNetworkCheck $Port $InstallDir $HttpsPort
 } else {
     Write-Warning 'The server did not answer within a minute.'
     if (Show-ShwDiagnosis -Port $Port -Address $bindHost -LogDir (Join-Path $DataRoot 'logs') -Since $started) {

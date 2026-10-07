@@ -112,6 +112,7 @@ def test_windows_scripts(tmp_path):
     assert res.returncode == 0, res.stdout + res.stderr
     s = load_settings(out)  # the config install.ps1 would write is valid for the server
     assert s.port == 8090 and s.log_file is not None and s.log_file.name == "shweather.log"
+    assert s.https_port == 8443 and s.tls_names == [] and s.tls_cert is None
 
 
 def test_web_assets_served_with_module_safe_types(tmp_path):

@@ -49,6 +49,10 @@ on the boat's Wi-Fi open the **SHWeather** web app, with no app store and no clo
   cloud pictures, then the forecast's rain, cloud and wind arrows (coloured by your reef
   limits) hour by hour for two days, plus buoy reports. The server downloads and caches
   the pictures only while the tab is open; the forecast layers and the land map work offline.
+- **Phone as GPS.** No GPS on the boat's network? Switch on *Use this device's location*
+  and the app sends the phone's position at the rate you pick (10 s to 1 h) while it's
+  open. The server serves HTTPS with a certificate it makes itself, because browsers only
+  share location over HTTPS.
 - **Your boat's limits.** Reef points and no-go limits colour every hour.
 - **Bandwidth limiter.** Speed cap, daily and monthly data caps, a reserve that keeps
   safety alerts flowing when a cap is reached, and a data-saver mode for metered links.
@@ -125,7 +129,8 @@ every option. The essentials:
 ```yaml
 sources:
   contact: you@example.com        # required by api.weather.gov
-home: { lat: 41.90, lon: -87.50 } # used until a GPS fix arrives
+home: { lat: 41.90, lon: -87.50 } # used until a GPS fix (boat or phone) arrives
+https_port: 8443                  # phones share their GPS only over HTTPS
 sensors:
   pressure_altitude_m: 176        # Lake Michigan: reduce the barometer to sea level
   nmea:

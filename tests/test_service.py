@@ -223,3 +223,79 @@ async def test_forecast_pressure_tendency_ignores_local_offset(tmp_path):
     assert tend["source"] == "forecast"
     assert tend["change_hpa"] == pytest.approx(raw_change, abs=0.2)
     await svc.aclose()
+
+
+class Clock:
+    def __init__(self, t: float = 1_800_000_000.0):
+        self.t = t
+
+    def __call__(self) -> float:
+        return self.t
+
+
+def test_phone_fixes_are_kept_in_memory_and_saved_sparingly(tmp_path):
+    """A phone polling every few seconds must not write to the SD card every few seconds."""
+    clock = Clock()
+    svc = WeatherService(Settings(data_dir=tmp_path), clock=clock)
+    pos = svc.set_position(41.9, -87.5, "phone", accuracy_m=7.94)
+    assert pos["source"] == "phone" and pos["accuracy_m"] == 7.9 and pos["age_s"] == 0
+    assert svc.db.last_position() is None
+    svc.save_positions()                                   # the minute flush
+    assert svc.db.last_position()["source"] == "phone"
+    rows = lambda: svc.db.query("SELECT COUNT(*) AS n FROM positions")[0]["n"]  # noqa: E731
+
+    clock.t += 10
+    svc.set_position(41.9001, -87.5, "phone", accuracy_m=9)    # ~11 m: same place
+    svc.save_positions()
+    assert rows() == 1
+    assert svc.position()["lat"] == 41.9001                    # ...but used straight away
+    clock.t += 60
+    svc.set_position(41.9020, -87.5, "phone")                  # 0.12 nm: the boat moved
+    svc.save_positions()
+    svc.save_positions()                                       # nothing new since
+    assert rows() == 2
+    clock.t += 600
+    svc.set_position(41.9020, -87.5, "phone")                  # still there ten minutes on
+    svc.save_positions()
+    assert rows() == 3
+
+    clock.t += 5
+    pos = svc.set_position(42.5, -87.7, "manual")              # typed in: saved at once, wins
+    assert pos["source"] == "manual" and rows() == 4 and svc.live_fix is None
+    clock.t += 5
+    assert svc.set_position(42.6, -87.7, "phone")["source"] == "phone"   # a newer fix wins again
+    svc.db.close()
+
+
+def test_phone_fix_survives_a_restart_and_ages_out(tmp_path):
+    clock = Clock()
+    svc = WeatherService(Settings(data_dir=tmp_path, home=Position(lat=1, lon=2)), clock=clock)
+    svc.set_position(41.9, -87.5, "phone")
+    svc.save_positions()
+    svc.db.close()
+    clock.t += 3600
+    again = WeatherService(Settings(data_dir=tmp_path, home=Position(lat=1, lon=2)), clock=clock)
+    assert again.position()["source"] == "phone" and again.position()["age_s"] == 3600
+    clock.t += 8 * 86400
+    assert again.position()["source"] == "home"
+    again.db.close()
+
+
+def test_boat_gps_beats_phone_fixes(tmp_path):
+    clock = Clock()
+    svc = WeatherService(Settings(data_dir=tmp_path), clock=clock)
+    svc.hub.update({"lat": 41.95, "lon": -87.55}, "nmea", ts=clock.t)
+    pos = svc.set_position(41.9, -87.5, "phone")
+    assert pos["source"] == "gps" and pos["lat"] == 41.95
+    svc.db.close()
+
+
+def test_position_api_accepts_accuracy(tmp_path):
+    st = Settings(data_dir=tmp_path, demo=True)
+    with TestClient(create_app(st, start_background=False), headers=W) as c:
+        pos = c.post("/api/position", json={"lat": 42.0, "lon": -87.6, "source": "phone", "accuracy_m": 12.34}).json()
+        assert pos["source"] == "phone" and pos["accuracy_m"] == 12.3
+        assert c.get("/api/status").json()["position"]["accuracy_m"] == 12.3
+        assert c.post("/api/position", json={"lat": 42.0, "lon": -87.6, "accuracy_m": -1}).status_code == 422
+        pos = c.post("/api/position", json={"lat": 42.1, "lon": -87.6, "source": "manual", "accuracy_m": None}).json()
+        assert pos["source"] == "manual"

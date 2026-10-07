@@ -7,6 +7,7 @@ that feeds the SensorHub, so no locking is needed around live instrument values.
 from __future__ import annotations
 
 import hmac
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request, Response
 from pydantic import BaseModel, Field
@@ -14,6 +15,7 @@ from pydantic import BaseModel, Field
 from .config import BandwidthConfig, BoatProfile
 from .imagery import MAX_ZOOM, ImageryError, image_type
 from .service import NoPosition, WeatherService
+from .tls import ca_certificate, pem_to_der
 
 router = APIRouter(prefix="/api")
 
@@ -62,7 +64,10 @@ def may_download(request: Request) -> bool:
 class PositionIn(BaseModel):
     lat: float = Field(ge=-90, le=90)
     lon: float = Field(ge=-180, le=180)
-    source: str = Field("phone", max_length=32)
+    source: str = Field("phone", max_length=32,
+                        description="'phone' for a fix from a device's GPS (sent repeatedly while the app "
+                                    "is open), 'manual' for a position typed in")
+    accuracy_m: float | None = Field(None, ge=0, le=1_000_000, description="The fix's accuracy radius")
 
 
 @router.get("/status", summary="Service health, position source, per-source status")
@@ -123,9 +128,27 @@ async def tides(s: WeatherService = Depends(svc)):
     return s.cached("tides")
 
 
-@router.post("/position", dependencies=WRITE, summary="Set position, e.g. from a phone's GPS when the Pi has none")
+@router.post("/position", dependencies=WRITE,
+             summary="Set position from a phone's GPS (when the boat has none) or by hand")
 async def set_position(body: PositionIn, s: WeatherService = Depends(svc)):
-    return s.set_position(body.lat, body.lon, body.source)
+    """Returns the position the server now uses, which stays the boat's own GPS while it has a fix."""
+    return s.set_position(body.lat, body.lon, body.source, body.accuracy_m)
+
+
+@router.get("/tls/ca.crt", response_class=Response,
+            summary="The server's own certificate authority, for phones to install (no HTTPS warning)")
+async def tls_ca(format: Literal["der", "pem"] = Query("der", description="der for phones, pem for computers"),
+                 s: WeatherService = Depends(svc)):
+    """Only offered while HTTPS uses a certificate the server made itself (not ``tls_cert``)."""
+    pem = ca_certificate(s.settings) if (s.https or {}).get("own_certificate") else None
+    if not pem:
+        raise HTTPException(404, "This server has no certificate authority of its own "
+                                 "(HTTPS is off, still starting, or uses your own tls_cert)")
+    if format == "pem":
+        return Response(pem, media_type="application/x-pem-file",
+                        headers={"Content-Disposition": 'attachment; filename="SHWeather-CA.pem"'})
+    return Response(pem_to_der(pem), media_type="application/x-x509-ca-cert",
+                    headers={"Content-Disposition": 'attachment; filename="SHWeather-CA.crt"'})
 
 
 @router.post("/refresh", dependencies=WRITE,

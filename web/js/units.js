@@ -232,3 +232,12 @@ export function fmtLatLon(lat, lon) {
   };
   return `${f(lat, "N", "S")} ${f(lon, "E", "W")}`;
 }
+
+/** A GPS accuracy radius (metres): "8 m" or "26 ft" when small, else in distance units ("1.2 km"). */
+export function fmtAccuracy(m) {
+  if (m == null || !Number.isFinite(m)) return "?";
+  const small = units.height === "ft" ? m < 1609 : m < 1000;
+  if (small) return `${num(height(m), 0)} ${unit("height")}`;
+  const d = distance(m / 1852);
+  return `${num(d, d < 10 ? 1 : 0)} ${unit("distance")}`;
+}

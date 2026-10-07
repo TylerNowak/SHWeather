@@ -158,6 +158,13 @@ h2 { margin: 0; }
 .badge.old::before, .badge.down::before { background: var(--critical); }
 
 .demo-banner { background: var(--warning); color: #111; text-align: center; font-size: 13px; font-weight: 600; padding: 4px 16px; }
+/* This device's GPS is switched on but blocked: say so where it can't be missed. */
+.gps-banner {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px 12px;
+  background: var(--surface-2); border-bottom: 3px solid var(--warning); font-size: 13px; padding: 6px 16px;
+}
+.gps-banner[hidden] { display: none; }
+.gps-banner .btn { min-height: 32px; padding: 4px 12px; font-size: 13px; }
 
 /* ---------- layout ---------- */
 main { max-width: 1100px; margin: 0 auto; padding: 12px 16px 24px; display: grid; gap: var(--gap); }
@@ -330,6 +337,15 @@ label.check input { width: 22px; height: 22px; accent-color: var(--accent); }
   background: var(--surface-2); cursor: pointer; font-weight: 600;
 }
 .btn.primary { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
+a.btn { display: inline-flex; align-items: center; color: var(--ink-1); text-decoration: none; }
+a.btn.primary { color: var(--accent-ink); }
+.sub-legend { font-weight: 650; font-size: 14px; margin-top: 6px; }
+.gps-box { display: grid; gap: 8px; padding: 4px 12px 12px; border: 1px solid var(--grid); border-radius: 10px; }
+.gps-box label.check { font-weight: 600; }
+.gps-box select:disabled { opacity: .55; }
+.mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; overflow-wrap: anywhere; }
+.fp { font-size: 11px; }
+.steps { padding-left: 18px; display: grid; gap: 6px; margin: 8px 0; }
 .btn-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .form-msg { font-size: 13px; color: var(--ink-2); min-height: 1.2em; }
 .meter { height: 8px; border-radius: 4px; background: var(--seq-1); overflow: hidden; }

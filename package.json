@@ -4,6 +4,6 @@
   "description": "Tests for the SHWeather PWA (web/). The app itself needs no build step.",
   "type": "module",
   "scripts": {
-    "test": "node --test tests/web/units.test.mjs tests/web/radar.test.mjs tests/web/forecast.test.mjs"
+    "test": "node --test tests/web/units.test.mjs tests/web/radar.test.mjs tests/web/forecast.test.mjs tests/web/gps.test.mjs"
   }
 }
