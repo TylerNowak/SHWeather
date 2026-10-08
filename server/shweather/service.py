@@ -54,6 +54,14 @@ SAVER_FORECAST_DAYS = 3
 SAVER_REFRESH_FACTOR = 3        # forecast refreshed 3x less often
 SAVER_JOB_FACTOR = {"alerts": 1.5, "buoys": 4, "marine_text": 3, "tides": 2}
 
+# Positions phones send while they poll their own GPS (every few seconds to an hour) are
+# kept in memory and written to the database like the boat's GPS: on the minute flush, once
+# the boat has moved or ten minutes have passed, so a busy phone never wears the SD card.
+LIVE_SOURCES = {"phone"}
+LIVE_SAVE_MOVE_NM = 0.05
+LIVE_SAVE_INTERVAL_S = 600
+STORED_POSITION_MAX_AGE_S = 7 * 86400
+
 
 class NoPosition(RuntimeError):
     pass
@@ -81,6 +89,9 @@ class WeatherService:
         self._interp_cache: dict[tuple, tuple[float, dict]] = {}
         self.imagery = Imagery(settings, self.http, self.db, position=self.position,
                                saver=lambda: self.bandwidth().saver, clock=clock)
+        self.live_fix: dict | None = None            # latest fix from a phone's GPS
+        self._saved_live: tuple[float, float, float] | None = None
+        self.https: dict | None = None               # the HTTPS listener's state, for /api/status
 
     async def aclose(self) -> None:
         await self.http.aclose()
@@ -146,20 +157,55 @@ class WeatherService:
     # ------------------------------------------------------------------ position
 
     def position(self) -> dict:
+        """Where the boat is: its own GPS, else the newest fix a phone sent or someone typed in
+        (up to a week old), else ``home`` from the config."""
         gps = self.hub.position()
         if gps:
             return {**gps, "source": "gps", "age_s": round(self.clock() - gps["ts"], 1)}
-        last = self.db.last_position()
-        if last and self.clock() - last["ts"] < 7 * 86400:
-            return {**last, "age_s": round(self.clock() - last["ts"], 1)}
+        stored = [p for p in (self.live_fix, self.db.last_position()) if p]
+        best = max(stored, key=lambda p: p["ts"], default=None)
+        if best and self.clock() - best["ts"] < STORED_POSITION_MAX_AGE_S:
+            return {**best, "age_s": round(self.clock() - best["ts"], 1)}
         if self.settings.home:
             return {"lat": self.settings.home.lat, "lon": self.settings.home.lon, "source": "home",
                     "ts": None, "age_s": None}
         raise NoPosition("No GPS fix, no stored position and no 'home' in config.yaml")
 
-    def set_position(self, lat: float, lon: float, source: str = "phone") -> dict:
-        self.db.add_position(self.clock(), lat, lon, source)
+    def set_position(self, lat: float, lon: float, source: str = "manual",
+                     accuracy_m: float | None = None) -> dict:
+        """A position from a phone's GPS (``source="phone"``, sent again and again while the
+        app is open) or typed in by hand. The boat's own GPS still takes priority."""
+        now = self.clock()
+        if source in LIVE_SOURCES:
+            self.live_fix = {"ts": now, "lat": lat, "lon": lon, "source": source,
+                             "accuracy_m": None if accuracy_m is None else round(accuracy_m, 1)}
+        else:
+            self.live_fix = None   # a position typed in replaces whatever a phone sent before
+            self.db.add_position(now, lat, lon, source)
         return self.position()
+
+    def live_fix_to_save(self) -> dict | None:
+        """The phone fix to write to the database now, if any (called once a minute)."""
+        fix = self.live_fix
+        if not fix:
+            return None
+        last = self._saved_live
+        if last is not None and fix["ts"] == last[2]:
+            return None
+        if (last is None or fix["ts"] - last[2] >= LIVE_SAVE_INTERVAL_S
+                or distance_nm(last[0], last[1], fix["lat"], fix["lon"]) >= LIVE_SAVE_MOVE_NM):
+            self._saved_live = (fix["lat"], fix["lon"], fix["ts"])
+            return fix
+        return None
+
+    def save_positions(self) -> None:
+        """Write the boat's GPS and the phones' latest fix to the database, sparingly."""
+        pos = self.hub.position_to_save()
+        if pos:
+            self.db.add_position(pos["ts"], pos["lat"], pos["lon"], "gps")
+        fix = self.live_fix_to_save()
+        if fix:
+            self.db.add_position(fix["ts"], fix["lat"], fix["lon"], fix["source"])
 
     # ------------------------------------------------------------------ refresh: forecast grid
 
@@ -662,4 +708,5 @@ class WeatherService:
             "bandwidth": self.http.usage(),
             "display": self.settings.display.model_dump(),
             "platform": sys.platform,
+            "https": self.https or {"enabled": False},
         }

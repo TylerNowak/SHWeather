@@ -98,9 +98,7 @@ class Scheduler:
         rows = self.s.hub.flush_minute()
         if rows:
             self.s.db.add_observations(rows)
-        pos = self.s.hub.position_to_save()
-        if pos:
-            self.s.db.add_position(pos["ts"], pos["lat"], pos["lon"], "gps")
+        self.s.save_positions()
 
     def prune(self, now: float) -> None:
         self.s.db.prune_observations(now - self.s.settings.observation_retention_days * 86400)

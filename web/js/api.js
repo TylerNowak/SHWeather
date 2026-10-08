@@ -98,6 +98,8 @@ export const api = {
   saveBoat: (b) => request("PUT", "api/boat", b),
   bandwidth: () => request("GET", "api/bandwidth"),
   saveBandwidth: (b) => request("PUT", "api/bandwidth", b),
-  setPosition: (lat, lon) => request("POST", "api/position", { lat, lon, source: "phone" }),
+  // source "phone": a fix from this device's GPS (sent repeatedly); "manual": typed in
+  setPosition: (lat, lon, { source = "manual", accuracy = null } = {}) =>
+    request("POST", "api/position", { lat, lon, source, accuracy_m: accuracy }),
   refresh: (radiusNm) => request("POST", radiusNm ? `api/refresh?radius_nm=${radiusNm}` : "api/refresh", null, REFRESH_TIMEOUT_MS),
 };

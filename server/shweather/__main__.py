@@ -20,6 +20,7 @@ LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s: %(message)s"
 PORT_IN_USE = {errno.EADDRINUSE, 10048}
 PORT_DENIED = {errno.EACCES, 10013}   # Windows: a reserved (excluded) port or security software
 SPARE_PORTS = (8090, 8081, 8088, 8000, 8888, 9080)
+SPARE_HTTPS_PORTS = (8443, 9443, 8444, 10443, 4443)
 
 
 def _bind_error(host: str | None, port: int) -> OSError | None:
@@ -42,21 +43,28 @@ def _bind_error(host: str | None, port: int) -> OSError | None:
 
 
 def port_problem(host: str | None, port: int, config: os.PathLike | str | None = None,
-                 from_cli: bool = False) -> str | None:
-    """Why the server can't listen on host:port, in plain words; None if the port looks fine."""
+                 from_cli: bool = False, setting: str = "port") -> str | None:
+    """Why the server can't listen on host:port, in plain words; None if the port looks fine.
+
+    ``setting`` names the config key for this port: ``port`` (HTTP) or ``https_port``.
+    """
     exc = _bind_error(host, port)
     if exc is None or exc.errno not in PORT_IN_USE | PORT_DENIED:
         return None
-    spare = next((p for p in SPARE_PORTS if p != port and _bind_error(host, p) is None), None)
+    spares = SPARE_HTTPS_PORTS if setting == "https_port" else SPARE_PORTS
+    spare = next((p for p in spares if p != port and _bind_error(host, p) is None), None)
     other = f"a free port such as {spare}" if spare else "a free port"
     if from_cli:
         fix = f"start it with --port set to {other}"
     else:
-        fix = f"set 'port:' in {config or 'config.yaml'} to {other} and restart"
+        fix = f"set '{setting}:' in {config or 'config.yaml'} to {other} and restart"
         if sys.platform == "win32":
-            fix += f" (re-running install.ps1 -Port {spare or 8090} does that and updates the firewall rule)"
+            flag = "-HttpsPort" if setting == "https_port" else "-Port"
+            fix += f" (re-running install.ps1 {flag} {spare or 8090} does that and updates the firewall rule)"
     if exc.errno in PORT_IN_USE:
-        return f"Port {port} is already in use by another program, so the server cannot start. Stop that program, or {fix}."
+        what = "HTTPS cannot start (the app still works over plain HTTP)" if setting == "https_port" \
+            else "the server cannot start"
+        return f"Port {port} is already in use by another program, so {what}. Stop that program, or {fix}."
     if sys.platform == "win32":
         return (f"Windows does not allow port {port}: it is in a reserved range (Hyper-V, WSL and Docker reserve "
                 f"blocks of ports; list them with 'netsh interface ipv4 show excludedportrange protocol=tcp') "
@@ -95,6 +103,8 @@ def _settings(args):
         settings.host = args.host
     if getattr(args, "port", None):
         settings.port = args.port
+        if settings.https_port == settings.port:   # --port took the HTTPS port: move HTTPS aside
+            settings.https_port = 8444 if settings.port == 9443 else 9443
     return settings
 
 
@@ -107,8 +117,10 @@ def cmd_serve(args) -> int:
     setup_logging(settings)
     try:
         # log_config=None: uvicorn's loggers propagate to our handlers (console + optional file).
-        uvicorn.run(create_app(settings), host=settings.host, port=settings.port, log_level=settings.log_level,
-                    log_config=None, access_log=settings.access_log, proxy_headers=True)
+        # The HTTPS listener (https_port) runs inside the app's lifespan, next to this one.
+        uvicorn.run(create_app(settings, serve_https=True), host=settings.host, port=settings.port,
+                    log_level=settings.log_level, log_config=None, access_log=settings.access_log,
+                    proxy_headers=True)
     except SystemExit as exc:
         # uvicorn exits when it can't start; the usual reason is the port, and its own
         # message ("[Errno 10048] ... only one usage of each socket address") says little.

@@ -67,6 +67,7 @@ SHWeatherService: folders, scheduled task and firewall rules.)
 | Storage | SQLite (WAL) | Zero admin, survives power cuts, one file to back up. Writes are batched once a minute to spare the SD card. |
 | Forecast transport | Open-Meteo JSON (not GRIB) | GRIB decoding needs eccodes (large native dependency). Open-Meteo accepts many coordinates per request, so we fetch a small grid of points as JSON and interpolate locally. GRIB export for OpenCPN is on the roadmap. |
 | Web UI | Vanilla JS PWA, no build step | Anyone can edit it on the Pi itself; service worker gives offline caching; installable on iOS/Android. Native wrapper (Capacitor) later if needed. |
+| HTTPS | A second listener with a certificate from the server's own CA, name-constrained to the local network, made with the standard library | Phones share their GPS (and keep an offline copy) only over HTTPS; a boat has no domain or internet for a public certificate, and `cryptography`/`openssl` would be a native dependency or missing on Windows. |
 | Instruments | NMEA 0183 + Signal K REST + BME280 | NMEA 0183 covers most multiplexers and older instruments; Signal K (e.g. OpenPlotter) already bridges NMEA 2000. A $5 BME280 gives any boat a barograph. |
 | Units | Canonical internal units, convert in the UI | See below. |
 
@@ -200,6 +201,39 @@ timeline that runs from the last hour of observations into the forecast:
 **Staleness is always visible.** Every response carries `fetched_at` and `age_s`, and
 the UI turns the forecast badge amber after 6 h and red after 24 h.
 
+## Position and phone GPS
+
+The server uses, in order: the boat's own GPS (NMEA or Signal K, while its fix is fresh),
+else the newest position a phone sent or someone typed in (up to a week old), else `home`
+from the config.
+
+**Phones as GPS.** With *Use this device's location* on (Settings > Position, stored per
+device with its rate, 10 s to 1 h), `web/js/gps.js` calls `getCurrentPosition` (high
+accuracy) at that rate while the app is on screen and posts each fix to
+`POST /api/position` with `source: "phone"` and its accuracy. It pauses while the page is
+hidden (browsers don't share location from the background) and catches up when it's back,
+skips fixes rougher than 10 km and stands by while the server reports a fresh boat GPS. A
+watchdog covers browsers that never answer a dismissed permission prompt; a blocked
+permission shows a banner. The logic is plain functions with the browser parts injectable,
+tested in Node.
+
+The server keeps the latest phone fix in memory (`WeatherService.live_fix`) and writes it
+on the minute flush only when it has moved 0.05 nm or ten minutes have passed, like the
+boat's GPS, so a phone polling every 10 s doesn't wear out the SD card. A position typed in
+(`source: "manual"`) is written at once and replaces the phone fix until a newer one arrives;
+the app switches its own polling off when you type one.
+
+**HTTPS.** Browsers give a page the device's location (and service workers) only on a
+secure origin, so `shweather serve` also serves the same app over HTTPS on `https_port`
+(8443). `tls.py` makes, with the standard library only (RSA from Python integers, DER by
+hand), a local CA name-constrained to private addresses and `.local`/`.lan`/`.home.arpa`/
+`.internal`, and a server certificate for the machine's local addresses, re-signed when
+they change or before it expires. The HTTPS listener is a second uvicorn server started and
+stopped by the app's lifespan (signals stay with the HTTP server); a busy port or a broken
+certificate only turns HTTPS off. `/api/status` reports it (`https`), and
+`/api/tls/ca.crt` hands phones the CA to install. Users with their own certificate set
+`tls_cert`/`tls_key`.
+
 ## Local ("nowcast") forecasting
 
 The Pi turns forecast + instruments into a local forecast with three cheap techniques:
@@ -245,6 +279,7 @@ server/shweather/
   geo.py          Distances, grids, inverse-distance interpolation
   units.py        Unit conversion helpers
   imagery.py      Radar/satellite frame lists and the tile proxy + disk cache (Radar tab)
+  tls.py          HTTPS: the server's own CA + certificate (stdlib only) and the HTTPS listener
   demo.py         Synthetic data transport for offline demos and UI work
   demo_imagery.py Synthetic radar and satellite tiles (small PNG encoder) for demo mode
   simulator.py    NMEA 0183 sentence generator (sail without a boat)
@@ -253,7 +288,8 @@ server/shweather/
   analysis/       beaufort, pressure, zambretti, wind (true wind), nowcast, conditions
 web/              SHWeather PWA (index.html, js/, css/, sw.js, manifest); js/app.js = Wind tab + routing,
                   js/forecast.js + js/daily.js = Forecast tab, js/radar.js = Radar tab,
-                  js/units.js = unit systems, data/basemap.json = offline land map
+                  js/units.js = unit systems, js/gps.js = this device's GPS polling,
+                  data/basemap.json = offline land map
 tools/            build_basemap.py (Natural Earth -> web/data/basemap.json)
 deploy/           systemd unit, Raspberry Pi install script
 deploy/windows/   install.ps1, run-service.ps1 (supervisor), shweather-service.ps1, uninstall.ps1
@@ -264,7 +300,7 @@ tests/            pytest suite with recorded-format fixtures; tests/web: Node te
 
 | Method | Path | Purpose |
 |---|---|---|
-| GET | `/api/status` | Version, position and its source, per-source health, sensor freshness, data usage |
+| GET | `/api/status` | Version, position and its source, per-source health, sensor freshness, data usage, HTTPS listener |
 | GET | `/api/now` | Cockpit snapshot: instruments + forecast now + tendency + Zambretti + alerts + assessment |
 | GET | `/api/forecast?lat=&lon=&hours=&past_hours=` | Hourly interpolated forecast, local-corrected, with per-hour go/no-go (Wind and Forecast tabs) |
 | GET | `/api/observations?metrics=&hours=` | Onboard time series (barograph, wind history) |
@@ -272,7 +308,8 @@ tests/            pytest suite with recorded-format fixtures; tests/web: Node te
 | GET | `/api/marine-text` | NWS marine zone forecast text |
 | GET | `/api/buoys` | Nearest NDBC observations |
 | GET | `/api/tides` | Nearest tide station high/low and tidal-current predictions |
-| POST | `/api/position` | Set position from a phone's GPS when the Pi has none |
+| POST | `/api/position` | Position from a phone's GPS (`source: "phone"`, `accuracy_m`; sent repeatedly) or typed in (`"manual"`); the boat's GPS still wins |
+| GET | `/api/tls/ca.crt[?format=pem]` | The server's own CA certificate, for phones to install (while HTTPS uses it) |
 | POST | `/api/refresh?radius_nm=` | Force refresh / passage download |
 | GET/PUT | `/api/boat` | Boat profile (reef and no-go thresholds) |
 | GET/PUT | `/api/bandwidth` | Bandwidth limits, today's/this month's usage, 31-day history |

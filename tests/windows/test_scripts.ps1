@@ -56,7 +56,10 @@ Check ($cfg -match '(?m)^data_dir: data\b') 'config: data_dir relative'
 Check ($cfg -match '(?m)^port: 8090$') 'config: port'
 Check ($cfg -match '(?m)^web_root: "C:/Program Files/SHWeatherService/web"') 'config: web_root'
 Check ($cfg -match '(?m)^log_file: logs/shweather.log') 'config: log_file'
-Check (([regex]::Matches($cfg, '(?m)^(data_dir|port|web_root|log_file):')).Count -eq 4) 'config: no duplicate keys'
+Check ($cfg -match '(?m)^https_port: 8443$') 'config: https_port'
+Check (([regex]::Matches($cfg, '(?m)^(data_dir|port|https_port|web_root|log_file):')).Count -eq 5) 'config: no duplicate keys'
+$cfg9 = New-ShwConfigText $example 8090 'C:\Program Files\SHWeatherService' 9443
+Check ($cfg9 -match '(?m)^https_port: 9443$') 'config: chosen https_port'
 if ($env:SHW_TEST_OUT) { [System.IO.File]::WriteAllText($env:SHW_TEST_OUT, $cfg, (New-Object System.Text.UTF8Encoding $false)) }
 
 # 4. port lookup
@@ -64,6 +67,11 @@ $tmp = [System.IO.Path]::GetTempFileName()
 [System.IO.File]::WriteAllText($tmp, "host: 0.0.0.0`nport: 9123`n")
 Check ((Get-ShwConfigPort $tmp) -eq 9123) 'port read from config'
 Check ((Get-ShwConfigPort '/nonexistent/config.yaml' 8080) -eq 8080) 'port default'
+Check ((Get-ShwConfigPort $tmp 8443 'https_port') -eq 8443) 'https_port default when missing'
+[System.IO.File]::WriteAllText($tmp, "port: 9123`r`nhttps_port: 9443  # phones' GPS`r`nsensors:`r`n  port: 10110`r`n")
+Check ((Get-ShwConfigPort $tmp) -eq 9123 -and (Get-ShwConfigPort $tmp 8443 'https_port') -eq 9443) 'https_port read from config'
+[System.IO.File]::WriteAllText($tmp, "https_port: 0`n")
+Check ((Get-ShwConfigPort $tmp 8443 'https_port') -eq 0) 'https_port 0 (off) read from config'
 Remove-Item $tmp
 
 # 5. config lines: replaced in place keeping Windows line endings, added when missing
@@ -95,8 +103,10 @@ if (Get-Command Get-NetTCPConnection -ErrorAction SilentlyContinue) {
 } else {
     Check (@(Get-ShwPortOwners $busy).Count -eq 0) 'port owners: none without Get-NetTCPConnection'
 }
+Check (Test-ShwTcp $busy) 'something listens on the busy port'
 $other.Stop()
 Check ((Get-ShwPortState $busy '127.0.0.1') -eq 'Free') 'port free once released'
+Check (-not (Test-ShwTcp $busy 500)) 'nothing listens once released'
 Check ((Find-ShwFreePort '127.0.0.1' @()) -eq 0) 'no candidates, no port'
 $fake = [pscustomobject]@{ ProcessId = 4321; Name = 'httpd.exe'; Path = 'C:\Apache24\bin\httpd.exe'; Services = @('Apache2.4'); IsShw = $false }
 Check ((Format-ShwPortOwner $fake) -eq 'PID 4321  httpd.exe  (Windows service: Apache2.4)  C:\Apache24\bin\httpd.exe') 'port owner line'
@@ -110,6 +120,9 @@ $cmd = Format-ShwCommand 'C:\src\deploy\windows\install.ps1' $params
 Check ($cmd -eq 'powershell -ExecutionPolicy Bypass -File "C:\src\deploy\windows\install.ps1" -NmeaUdpPort 10110,2000 -AllowPublicNetworks -Python "C:\Program Files\Python312\python.exe" -Port 8090') 're-run command'
 Check ($install -match "PSBoundParameters\.ContainsKey\('Port'\)") 'installer: -Port updates an existing install'
 Check ($install.IndexOf('Checking that port') -lt $install.IndexOf('Copying the app')) 'installer: port checked before copying'
+Check ($install.IndexOf('(HTTPS) is free') -lt $install.IndexOf('Copying the app')) 'installer: HTTPS port checked before copying'
+Check ($install -match 'SHWeatherService web HTTPS \(\$HttpsPort/tcp\)') 'installer: firewall rule for HTTPS'
+Check ($install -match "PSBoundParameters\.ContainsKey\('HttpsPort'\)") 'installer: -HttpsPort updates an existing install'
 
 # 8. recent errors from the server log
 $log = [System.IO.Path]::GetTempFileName()
@@ -164,9 +177,9 @@ function New-MockRule([string]$Port, [string]$Profile, [string]$Enabled = 'True'
     [pscustomobject]@{ Name = 'shw-web'; DisplayName = "SHWeatherService web ($Port/tcp)"; Enabled = $Enabled; Profile = $Profile
                        Direction = 'Inbound'; Action = 'Allow'; PortFilter = [pscustomobject]@{ Protocol = 'TCP'; LocalPort = $Port } }
 }
-function Invoke-NetworkCheck {
+function Invoke-NetworkCheck([int]$HttpsPort = 0) {
     Set-StrictMode -Version 3   # as in install.ps1
-    $items = @(Show-ShwNetworkCheck 8090 $inst 6>&1 3>&1)
+    $items = @(Show-ShwNetworkCheck 8090 $inst $HttpsPort 6>&1 3>&1)
     return [pscustomobject]@{
         Problems = @($items | Where-Object { $_ -is [int] })[-1]
         Text     = (@($items | Where-Object { $_ -isnot [int] } | ForEach-Object { "$_" }) -join "`n")
@@ -204,6 +217,13 @@ Check ((Get-ShwTaskInstallDir 'D:\x') -eq 'C:\Program Files\SHWeatherService') '
 $global:ShwMock.Profiles = @([pscustomobject]@{ InterfaceIndex = 12; Name = 'HomeNet'; NetworkCategory = 'Private' })
 $r = Invoke-NetworkCheck
 Check ($r.Problems -eq 0 -and $r.Text -match 'Windows is not blocking phones') 'Private network: all clear'
+$r = Invoke-NetworkCheck 8443
+Check ($r.Text -match 'https://192\.168\.1\.50:8443' -and $r.Text -match 'certificate warning') 'secure address shown for phones'
+Check ($r.Problems -eq 1 -and $r.Text -match 'No firewall rule lets phones reach the secure \(HTTPS\) port 8443') 'missing HTTPS firewall rule flagged'
+$global:ShwMock.Rules = @((New-MockRule '8090' 'Domain, Private'), (New-MockRule '8443' 'Domain, Private'))
+$r = Invoke-NetworkCheck 8443
+Check ($r.Problems -eq 0) 'HTTPS firewall rule found'
+$global:ShwMock.Rules = @(New-MockRule '8090' 'Domain, Private')
 
 # 9c. -AllowPublicNetworks: the rule covers Public networks too
 $global:ShwMock.Profiles = @([pscustomobject]@{ InterfaceIndex = 12; Name = 'HomeNet'; NetworkCategory = 'Public' })

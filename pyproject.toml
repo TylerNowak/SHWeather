@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "shweather"
-version = "0.4.0"
+version = "0.5.0"
 description = "Self-hosted, offline-first marine weather for a Raspberry Pi or Windows PC aboard your boat"
 readme = "README.md"
 license = { file = "LICENSE" }

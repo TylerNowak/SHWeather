@@ -5,8 +5,9 @@ import { api } from "./api.js";
 import { lineChart } from "./charts.js";
 import { $, ago, clear, compass, dayLongLabel, dirArrow, h, hourShort, isoToEpoch, LEVELS, levelIcon, store, whenLabel } from "./dom.js";
 import { forecastMissing, forecastNow, forecastStatus, renderForecast } from "./forecast.js";
+import { gpsState, gpsStatusText, initGps, onGpsChange, setGpsEnabled } from "./gps.js";
 import { initRadar, radarUnitsChanged, radarUpdate, showRadar } from "./radar.js";
-import { openSettings, setTheme } from "./settings.js";
+import { gpsFormat, openSettings, secureUrl, setTheme } from "./settings.js";
 import * as T from "./text.js";
 import * as U from "./units.js";
 
@@ -55,6 +56,35 @@ function windClass(kn) {
   return `w${b === -1 ? 7 : b + 1}`;
 }
 
+// ------------------------------------------------------------------ position line + this device's GPS
+
+const SOURCE_LABEL = { gps: "Boat GPS", phone: "Phone GPS", manual: "Set by hand", cli: "Set by hand", home: "Home position" };
+
+function renderPosition() {
+  const p = state.now?.position;
+  if (!p) return;
+  const g = gpsState();
+  // The server's position is this device's latest fix: say so.
+  const mine = p.source === "phone" && g.enabled && g.fix
+    && Math.abs(g.fix.lat - p.lat) < 1e-7 && Math.abs(g.fix.lon - p.lon) < 1e-7;
+  const parts = [U.fmtLatLon(p.lat, p.lon), mine ? "This device's GPS" : SOURCE_LABEL[p.source] || p.source];
+  if (p.age_s != null && p.age_s >= 15 * 60) parts.push(ago(p.age_s));
+  const el = $("#position");
+  el.textContent = parts.join(" · ");
+  el.title = g.enabled ? gpsStatusText(g, gpsFormat) : "";
+}
+
+function renderGpsBanner(st = gpsState()) {
+  const b = $("#gps-banner");
+  const show = st.enabled && st.status === "denied";
+  b.hidden = !show;
+  if (!show) return;
+  clear(b).append(
+    h("span", { text: "Location is blocked for this page, so this device can't send its GPS position to the weather server." }),
+    h("button", { class: "btn", type: "button", text: "Settings", onclick: showSettings }),
+    h("button", { class: "btn", type: "button", text: "Turn off", onclick: () => setGpsEnabled(false) }));
+}
+
 // ------------------------------------------------------------------ connection badge
 
 function renderConn() {
@@ -100,8 +130,7 @@ function renderAlerts(now) {
 function renderNow() {
   const now = state.now;
   if (!now) return;
-  const p = now.position;
-  $("#position").textContent = `${U.fmtLatLon(p.lat, p.lon)} · ${p.source === "gps" ? "GPS" : p.source}`;
+  renderPosition();
 
   const w = now.wind;
   const d = now.wind_dir;
@@ -421,14 +450,37 @@ function renderStatus() {
 
 // ------------------------------------------------------------------ loading
 
-function showBlocking(message) {
+let blockingKey = null;
+
+function showBlocking(message, ...extra) {
   const box = clear($("#alerts"));
-  box.append(h("div", { class: "alert warning" }, h("div", { class: "alert-title", text: message })));
+  box.append(h("div", { class: "alert warning" }, h("div", { class: "alert-title", text: message }), ...extra));
+}
+
+/** No position anywhere yet: offer this device's GPS (or the secure address that allows it). */
+function showNoPosition() {
+  const g = gpsState();
+  const url = secureUrl(state.status);
+  const key = [g.support, g.enabled, g.status, url].join("|");
+  if (key === blockingKey && $("#alerts").childElementCount) return;   // keep focus on the buttons
+  blockingKey = key;
+  const actions = [];
+  if (g.support === "ok" && !g.enabled) {
+    actions.push(h("button", { class: "btn primary", type: "button", text: "Use this device's location", onclick: () => setGpsEnabled(true) }));
+  } else if (g.support === "insecure" && url) {
+    actions.push(h("a", { class: "btn primary", href: url, text: "Open the secure address to use this device's GPS" }));
+  }
+  actions.push(h("button", { class: "btn", type: "button", text: "Set it in Settings", onclick: showSettings }));
+  showBlocking("No position yet.",
+    h("p", { class: "help", text: g.enabled ? gpsStatusText(g, gpsFormat)
+      : "Connect a GPS to the boat's network, share this device's location, or type the position in Settings." }),
+    h("div", { class: "btn-row" }, actions));
 }
 
 async function loadNow() {
   try {
     state.now = await api.now();
+    blockingKey = null;
     if (state.now.__cached) {
       // Served by the service worker from its cache: the server is not reachable right now.
       state.error = new Error("Showing saved data");
@@ -441,7 +493,7 @@ async function loadNow() {
     radarUpdate();
   } catch (e) {
     state.error = e;
-    if (e.status === 409) showBlocking("No position yet. Connect a GPS, or open Settings and set the position.");
+    if (e.status === 409) showNoPosition();
     if (e.status === 401) showBlocking("This server requires an access token: open Settings and enter it.");
   }
   renderConn();
@@ -473,7 +525,11 @@ async function loadExtras() {
   if (tides.status === "fulfilled") state.tides = tides.value;
   if (buoys.status === "fulfilled") state.buoys = buoys.value;
   if (text.status === "fulfilled") state.marineText = text.value;
-  if (status.status === "fulfilled") { state.status = status.value; renderStatus(); }
+  if (status.status === "fulfilled") {
+    state.status = status.value;
+    renderStatus();
+    if (state.error?.status === 409) showNoPosition();   // now it knows the secure address
+  }
   renderSide();
   radarUpdate();
 }
@@ -530,6 +586,10 @@ function refreshEverything() {
   loadExtras();
 }
 
+function showSettings() {
+  openSettings(() => { renderAll(); loadNow(); loadForecast(); loadExtras(); });
+}
+
 // ------------------------------------------------------------------ boot
 
 function init() {
@@ -568,11 +628,28 @@ function init() {
     setTheme(order[(order.indexOf(cur) + 1) % order.length]);
     if (state.forecast) renderCharts();
   });
-  $("#settings-btn").addEventListener("click", () => openSettings(() => { renderAll(); loadNow(); loadForecast(); loadExtras(); }));
+  $("#settings-btn").addEventListener("click", showSettings);
 
   initRadar({ now: () => state.now, buoys: () => state.buoys });
   window.addEventListener("hashchange", applyView);
   applyView();
+
+  // This device's GPS: polled at the rate set in Settings while the app is open.
+  onGpsChange((st) => {
+    renderGpsBanner(st);
+    renderPosition();
+    if (!state.now && state.error?.status === 409) showNoPosition();
+  });
+  let catchUp = null;
+  initGps({
+    serverPosition: () => state.now?.position,
+    onSent: () => {
+      loadNow();
+      // A first position: the server is fetching the forecast for it now.
+      if (!state.forecast && !catchUp) catchUp = setTimeout(() => { catchUp = null; loadForecast(); loadExtras(); }, 20000);
+    },
+  });
+  renderGpsBanner();
 
   refreshEverything();
   setInterval(loadNow, 5000);         // live instruments

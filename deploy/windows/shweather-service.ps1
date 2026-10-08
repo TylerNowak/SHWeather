@@ -18,6 +18,7 @@ if (-not $DataRoot) { $DataRoot = $script:DefaultDataRoot }
 $ConfigPath = Join-Path $DataRoot 'config.yaml'
 $LogDir = Join-Path $DataRoot 'logs'
 $Port = Get-ShwConfigPort $ConfigPath
+$HttpsPort = Get-ShwConfigPort $ConfigPath $(if ($Port -eq 8443) { 9443 } else { 8443 }) 'https_port'
 $InstallDir = Get-ShwTaskInstallDir ((Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path)
 
 function Assert-Admin {
@@ -50,8 +51,15 @@ function Show-Status {
             Write-Host '    -Port (for example -Port 8090): it updates config.yaml and the firewall rule.'
         }
     }
+    if ($HttpsPort -ne 0) {
+        if (Test-ShwTcp $HttpsPort) {
+            Write-Host "HTTPS:      answering on port $HttpsPort (phones can share their GPS there)" -ForegroundColor Green
+        } else {
+            Write-Host "HTTPS:      not answering on port $HttpsPort (see the log: shweather-service.ps1 logs)" -ForegroundColor Yellow
+        }
+    }
     Write-Host 'Phones:'
-    $null = Show-ShwNetworkCheck $Port $InstallDir
+    $null = Show-ShwNetworkCheck $Port $InstallDir $HttpsPort
     Write-Host "Config:     $ConfigPath"
     Write-Host "Logs:       $LogDir"
 }
